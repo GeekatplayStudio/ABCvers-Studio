@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { __resetIdCounter, aspectOf, createId, intakeFiles, median, primeFps, probeFps } from './media'
+import {
+  __resetIdCounter,
+  __resetPrimeQueue,
+  aspectOf,
+  createId,
+  intakeFiles,
+  median,
+  primeFps,
+  probeFps,
+} from './media'
 import { MAX_PANELS } from './guards'
 import type { MediaItem } from '../types'
 
@@ -11,6 +20,7 @@ const createUrl = (file: File) => `blob:${file.name}`
 
 beforeEach(() => {
   __resetIdCounter()
+  __resetPrimeQueue()
 })
 
 describe('createId', () => {
@@ -248,5 +258,55 @@ describe('primeFps', () => {
     fire(0)
     fire(1 / 60) // one gap is not enough to satisfy samples=2, so this times out
     await expect(promise).resolves.toBe(60)
+  })
+
+  it('never primes two clips at once, so neither corrupts the other by fighting for the decoder', async () => {
+    // Confirmed against real footage: four real 24fps clips added together,
+    // each priming concurrently and racing the others for the decoder, came
+    // back as 12/12/18/18fps - frames silently dropped under the contention,
+    // read back as a confident, wrong, fraction of the true rate. Queuing one
+    // clip at a time is what prevents that.
+    const events: string[] = []
+    const a = fakeRvfcVideo({
+      play: vi.fn(() => {
+        events.push('a:play')
+        return Promise.resolve()
+      }),
+      pause: vi.fn(() => events.push('a:pause')),
+    })
+    const b = fakeRvfcVideo({
+      play: vi.fn(() => {
+        events.push('b:play')
+        return Promise.resolve()
+      }),
+      pause: vi.fn(() => events.push('b:pause')),
+    })
+
+    const pa = primeFps(a.video, { samples: 2 })
+    const pb = primeFps(b.video, { samples: 2 })
+
+    // Give both queued entries a chance to reach their `await video.play()` -
+    // only the head of the queue should actually have started.
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(events).toEqual(['a:play'])
+
+    a.fire(0)
+    a.fire(1 / 24)
+    a.fire(2 / 24)
+    await pa
+
+    // Only once `a` has fully finished - including its pause - may `b` start.
+    // `b:play` resolves before `b`'s requestVideoFrameCallback is registered,
+    // so give that its own microtask tick before firing frames at it.
+    await Promise.resolve()
+    expect(events).toEqual(['a:play', 'a:pause', 'b:play'])
+
+    b.fire(0)
+    b.fire(1 / 24)
+    b.fire(2 / 24)
+    await pb
+
+    expect(events).toEqual(['a:play', 'a:pause', 'b:play', 'b:pause'])
   })
 })

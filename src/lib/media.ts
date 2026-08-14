@@ -217,14 +217,46 @@ export interface PrimeFpsOptions {
  * probe rather than failing.
  *
  * Deliberately plays at the normal rate rather than sped up: a decoder that
- * cannot keep up in real time (slow hardware, a virtualized/headless
- * environment, a very heavy source) silently drops presented frames to catch
- * up, which doubles or triples the *apparent* gap between the frames that do
- * get presented - and this measurement has exactly one job, so a probe that
- * quietly reports half the true rate is a worse bug than the slightly longer
- * flash of a normal-speed one.
+ * cannot keep up in real time silently drops presented frames to catch up,
+ * which turns the *apparent* gap between the frames that do get presented
+ * into some multiple of the true one - a 24fps clip missing two out of every
+ * three frames reads back as a very confident, very wrong, 8fps. Measured
+ * against real 1080p footage, exactly this happened from ordinary decode
+ * contention: four camera-comparison clips added together, each racing the
+ * others for the same decoder, came back as 12/12/18/18fps. Comparing
+ * several clips side by side is this app's entire premise, so that isn't a
+ * rare case to shrug off - every call is queued through one shared probe at
+ * a time (see `primeQueue`) specifically so no two clips are ever primed
+ * concurrently, however many get dropped in together.
  */
 export async function primeFps(video: HTMLVideoElement, options: PrimeFpsOptions = {}): Promise<number> {
+  return enqueuePrime(() => runPrimeFps(video, options))
+}
+
+/**
+ * One shared queue for every in-flight `primeFps` call, app-wide. Each entry
+ * waits for the previous one to fully finish (play, probe, pause, restore)
+ * before it starts, so at most one clip is ever mid-priming at a time.
+ */
+let primeQueue: Promise<unknown> = Promise.resolve()
+
+function enqueuePrime<T>(task: () => Promise<T>): Promise<T> {
+  const result = primeQueue.then(task, task)
+  // Keep the queue moving even if this entry rejects - nothing here should
+  // throw (runPrimeFps has its own fallbacks), but the queue must never wedge.
+  primeQueue = result.then(
+    () => undefined,
+    () => undefined,
+  )
+  return result
+}
+
+/** Test-only: drop any queued/in-flight priming state between test cases. */
+export function __resetPrimeQueue(): void {
+  primeQueue = Promise.resolve()
+}
+
+async function runPrimeFps(video: HTMLVideoElement, options: PrimeFpsOptions): Promise<number> {
   const { samples = 8, timeoutMs = 900 } = options
   const el = video as RVFCVideo
   if (typeof el.requestVideoFrameCallback !== 'function') {
