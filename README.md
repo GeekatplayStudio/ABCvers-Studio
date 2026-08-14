@@ -6,7 +6,7 @@
 By **Geekatplay Studio** — *Vladimir Chopine*.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-e8813a.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-245%20passing-2e9e5b.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-249%20passing-2e9e5b.svg)](#testing)
 [![Built with React](https://img.shields.io/badge/react-18-1e2126.svg?logo=react)](https://react.dev)
 [![Built with Vite](https://img.shields.io/badge/vite-6-1e2126.svg?logo=vite)](https://vitejs.dev)
 [![TypeScript](https://img.shields.io/badge/typescript-strict-1e2126.svg?logo=typescript)](tsconfig.json)
@@ -606,6 +606,18 @@ narrow panel wraps its metadata onto more lines; the row reserves the tallest
 strip so one panel cannot push the pictures out of alignment. A splitter drag
 conserves the dragged pair's total weight, so the rest of the row never jumps.
 
+That reservation is deliberately **capped at half the row's height**
+(`MAX_FOOTER_SHARE` in `layout.ts`), the fix for a real bug: the info strip's
+own grid used to run out of columns and stack its fields on a narrow panel,
+which grew the footer, which shrank the picture, which narrowed the panel
+further, which stacked more fields - an unbounded collapse down to a sliver a
+few dozen pixels wide. Five real portrait video panels (the kind this app
+exists to compare) reproduced it exactly. Fixed on both ends: the info grid's
+column count is now fixed rather than responsive, so its height stops
+depending on panel width at all (see `.meta` in `global.css`), and the cap in
+`fitRow` bounds the damage regardless, in case anything else in a footer ever
+grows unexpectedly. `layout.test.ts` pins the cap's behaviour directly.
+
 ### Performance
 
 The tool has to stay smooth with a dozen decoders running, so:
@@ -665,7 +677,7 @@ npm run test:watch
 npm run coverage  # v8 coverage report in ./coverage
 ```
 
-**245 tests across 15 files**, all passing. The suite is weighted towards the
+**249 tests across 15 files**, all passing. The suite is weighted towards the
 logic that is hard to eyeball:
 
 | File | Covers |
@@ -677,7 +689,7 @@ logic that is hard to eyeball:
 | `lib/guards.test.ts` | Classification by MIME and by extension (including EXR/DNG), size and emptiness rejection, numeric coercion, `NaN` handling, image-decoder routing. |
 | `lib/format.test.ts` | Byte scaling, clock and SMPTE timecode (including the floating-point edges that make `62.48` print `.479`), duration, aspect reduction, middle truncation. |
 | `lib/media.test.ts` | File intake and EXR/DNG decoder routing, panel limit accounting, object-URL failures, frame-rate median and broadcast-rate snapping, aspect fallbacks, the priming probe itself (real samples, exact restoration, normal speed, autoplay-refused fallback, never two clips at once), and the `loadExr`/`loadDngPreview` fetch-to-decode orchestration against the same real fixtures. |
-| `lib/layout.test.ts` | Auto columns, row chunking, aspect-derived weights, splitter conservation, and `fitRow`: shared height, integer edges, height- vs width-constrained rows, strip reservation, no overflow. |
+| `lib/layout.test.ts` | Auto columns, row chunking, aspect-derived weights, splitter conservation, and `fitRow`: shared height, integer edges, height- vs width-constrained rows, strip reservation, no overflow, and the footer-reservation cap that stops a tall info strip from shrinking a panel's picture without bound. |
 | `components/Stage.test.tsx` | The edge-to-edge guarantee against the real DOM: a 16:9 and a 1:1 panel come out 768x432 and 432x432 sharing one height, widths summing to the full row; mixed orientations keep integer edges; locked aspect gives identical boxes; short rows are height-constrained; multi-row splitting. |
 | `store/useStudio.test.ts` | Add/remove/reorder, URL revocation, metadata, zoom state, the volume/mute/solo matrix, layout state, toasts. |
 | `components/*.test.tsx` | Scrubber, volume and exposure pointer/keyboard interaction and ARIA; media info rendering for video, stills, EXR, DNG, loading and error states. |

@@ -129,9 +129,43 @@ describe('fitRow', () => {
 
   it('degrades safely before anything has been measured', () => {
     expect(fitRow([1, 1], { width: 0, height: 0 })).toEqual({ mediaHeight: 0, widths: [0, 0] })
-    expect(fitRow([1], { width: 100, height: 40 }, 200)).toEqual({ mediaHeight: 0, widths: [0] })
     expect(fitRow([], { width: 100, height: 100 })).toEqual({ mediaHeight: 0, widths: [] })
     expect(fitRow([0, 0], { width: 100, height: 100 })).toEqual({ mediaHeight: 0, widths: [0, 0] })
+  })
+
+  describe('footer reservation cap', () => {
+    // Regression coverage for a real bug: a narrow panel's info strip can
+    // legitimately need more vertical space (its fields wrap onto more
+    // rows), and reserving that in full shrinks the picture, which narrows
+    // the panel further, which wraps more fields - an unbounded collapse
+    // down to a sliver a few tens of pixels wide. Confirmed against five
+    // real portrait video panels: they collapsed to ~70px wide before this
+    // cap existed.
+
+    it('never lets the footer claim more than half the row, however tall it measures', () => {
+      // width kept large so the picture is height- (not width-) constrained,
+      // isolating the footer cap's effect.
+      const { mediaHeight } = fitRow([1], { width: 4000, height: 400 }, 1000)
+      expect(mediaHeight).toBe(200) // half of 400, not "negative and clamped to zero"
+    })
+
+    it('leaves the picture at exactly the uncapped size when the footer fits comfortably', () => {
+      const capped = fitRow([1], { width: 4000, height: 400 }, 190) // well under 50%
+      expect(capped.mediaHeight).toBe(210) // 400 - 190, cap never engages
+    })
+
+    it('is a strict function of height, not a runaway: doubling a too-tall footer does not shrink the picture further', () => {
+      const a = fitRow([1], { width: 4000, height: 400 }, 500)
+      const b = fitRow([1], { width: 4000, height: 400 }, 5000)
+      expect(a.mediaHeight).toBe(200)
+      expect(b.mediaHeight).toBe(200)
+    })
+
+    it('a footer that would consume the entire row still leaves a usable picture rather than collapsing to zero', () => {
+      const { mediaHeight, widths } = fitRow([1], { width: 100, height: 40 }, 200)
+      expect(mediaHeight).toBe(20) // half of 40, previously this fell to 0
+      expect(widths[0]).toBe(20)
+    })
   })
 })
 

@@ -823,7 +823,16 @@ button {
 
 .meta {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  /* A fixed count, deliberately not responsive (no auto-fit/minmax): this
+     grid's own height feeds back into how much width the panel gets (see
+     fitRow's footer reservation), so a wrap-to-more-rows-when-narrow layout
+     here turns an ordinary narrow panel into a runaway-shrinking one - each
+     field getting its own row inflates the footer, which shrinks the row's
+     picture height, which narrows the panel further, which wraps more
+     fields onto their own row. Held constant, the footer's height stops
+     depending on panel width at all, which is what breaks that loop. Values
+     still truncate with an ellipsis rather than overflow when narrow. */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 2px 12px;
   margin: 0;
   padding: 6px 9px 8px;
@@ -846,6 +855,11 @@ button {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);
+  /* Truncate rather than wrap - "FRAME RATE" wrapping to two lines in a
+     narrow column throws that field's row out of alignment with the rest. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .meta__value {

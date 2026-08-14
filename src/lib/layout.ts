@@ -93,13 +93,25 @@ export interface RowFit {
  * adjacent panels share an exact pixel boundary and no sub-pixel seam can show
  * the background through between two pictures.
  */
+/**
+ * However tall the footer measures, never let it claim more than this share
+ * of the row. Without a cap, a footer that grows because the panel is
+ * narrow (the info strip's grid running out of columns and stacking its
+ * fields, for instance) shrinks the picture, which narrows the panel
+ * further, which grows the footer again - an unbounded collapse down to a
+ * sliver. The cap turns that into a bounded, one-time degradation instead:
+ * the picture stays at least half the row no matter what the footer wants.
+ */
+const MAX_FOOTER_SHARE = 0.5
+
 export function fitRow(weights: readonly number[], box: Size, footerHeight = 0): RowFit {
   const zero: RowFit = { mediaHeight: 0, widths: weights.map(() => 0) }
   if (weights.length === 0) return { mediaHeight: 0, widths: [] }
 
   let sum = 0
   for (const weight of weights) sum += weight > 0 ? weight : 0
-  const available = box.height - Math.max(0, footerHeight)
+  const reservedFooter = Math.min(Math.max(0, footerHeight), box.height * MAX_FOOTER_SHARE)
+  const available = box.height - reservedFooter
   if (sum <= 0 || box.width <= 0 || available <= 0) return zero
 
   const mediaHeight = Math.floor(Math.min(available, box.width / sum))
