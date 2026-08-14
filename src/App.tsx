@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Toolbar } from './components/Toolbar'
 import { Stage } from './components/Stage'
+import { DrawingLayer } from './components/DrawingLayer'
 import { TransportBar } from './components/TransportBar'
 import { EmptyState } from './components/EmptyState'
 import { Toasts } from './components/Toasts'
@@ -27,6 +28,7 @@ export default function App() {
 
       <main className="app__main">
         <ErrorBoundary>{items.length === 0 ? <EmptyState /> : <Stage />}</ErrorBoundary>
+        {items.length > 0 && <DrawingLayer />}
       </main>
 
       <TransportBar />

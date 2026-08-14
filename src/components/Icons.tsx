@@ -187,3 +187,10 @@ export const StopwatchIcon = (p: IconProps) => (
     <path d="M18.5 5.5l1.5-1.5" />
   </Svg>
 )
+
+export const PenIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M14.5 4.5 19.5 9.5 8 21H3v-5z" />
+    <path d="M12.5 6.5 17.5 11.5" />
+  </Svg>
+)

@@ -99,6 +99,53 @@ button {
   background: var(--bg-panel);
 }
 
+/* ------------------------------------------------------------ annotations -- */
+
+.drawing-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  touch-action: none;
+  z-index: 5;
+}
+
+.drawing-layer[data-active] {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+.drawing-layer__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.annotation-stroke {
+  transform-box: fill-box;
+  transform-origin: center;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.7));
+  animation: annotation-pulse 1.9s ease-in-out infinite;
+}
+
+.annotation-stroke--live {
+  animation: none;
+  opacity: 0.92;
+}
+
+@keyframes annotation-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.07);
+    opacity: 0.82;
+  }
+}
+
+/* prefers-reduced-motion is already handled globally, near the end of this file. */
+
 /* --------------------------------------------------------------- toolbar -- */
 
 .toolbar {
@@ -363,6 +410,56 @@ button {
   padding: 0 2px;
   min-width: 34px;
   text-align: center;
+}
+
+.pen-anchor {
+  position: relative;
+  display: flex;
+}
+
+.pen-swatch {
+  display: block;
+  width: 9px;
+  height: 9px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: var(--pen-color, var(--accent));
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  flex: none;
+}
+
+.pen-picker {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
+
+.pen-picker__swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  background: var(--swatch);
+  cursor: pointer;
+}
+
+.pen-picker__swatch:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.pen-picker__swatch[data-selected] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(232, 129, 58, 0.35);
 }
 
 /* ----------------------------------------------------------------- stage -- */

@@ -65,6 +65,7 @@ export function useShortcuts(onHelp: () => void): void {
           return
         case 'Escape':
           if (store.zoomMode) store.setZoomMode(false)
+          if (store.drawMode) store.setDrawMode(false)
           return
       }
 
@@ -89,6 +90,9 @@ export function useShortcuts(onHelp: () => void): void {
           break
         case 't':
           store.toggleRenderTime()
+          break
+        case 'p':
+          store.toggleDrawMode()
           break
         case 'f':
           if (document.fullscreenElement) void document.exitFullscreen()

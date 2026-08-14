@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import App from './App'
 import { useStudio } from './store/useStudio'
 import { syncEngine } from './lib/sync'
+import { DEFAULT_PEN_COLOR } from './lib/draw'
 
 function fakeFile(name: string, type = 'video/mp4', size = 4096): File {
   return { name, type, size, lastModified: 1_700_000_000_000 } as File
@@ -27,6 +28,9 @@ beforeEach(() => {
     columns: 'auto',
     aspect: 'free',
     fitMode: 'fit',
+    strokes: [],
+    drawMode: false,
+    drawColor: DEFAULT_PEN_COLOR,
   })
   vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`)
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
@@ -131,6 +135,52 @@ describe('ABCvers Studio shell', () => {
     expect(screen.getByTitle('Current magnification')).toHaveTextContent('2.0x')
     fireEvent.click(screen.getByRole('button', { name: /Reset/ }))
     expect(useStudio.getState().zoom).toBeNull()
+  })
+
+  it('the pen: toggles from the toolbar, draws across the whole stage, and clears from one button', () => {
+    render(<App />)
+    addMedia(fakeFile('a.mp4'), fakeFile('b.mp4'))
+    const penButton = screen.getByRole('button', { name: /^Pen/ })
+
+    fireEvent.click(penButton)
+    expect(useStudio.getState().drawMode).toBe(true)
+
+    // Drawing lands on the shared overlay, not on either panel individually -
+    // it exists precisely so a stroke can cross from one panel into the next.
+    const layer = document.querySelector('.drawing-layer')!
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 10, pointerId: 1, button: 0 })
+    fireEvent.pointerMove(layer, { clientX: 80, clientY: 40, pointerId: 1 })
+    fireEvent.pointerUp(layer, { clientX: 80, clientY: 40, pointerId: 1 })
+    expect(useStudio.getState().strokes).toHaveLength(1)
+
+    const clearButton = screen.getByRole('button', { name: 'Clear every drawing' })
+    expect(clearButton).toBeEnabled()
+    fireEvent.click(clearButton)
+    expect(useStudio.getState().strokes).toHaveLength(0)
+    expect(clearButton).toBeDisabled()
+  })
+
+  it('right-clicking the pen opens a colour picker, and picking a colour applies to new strokes', () => {
+    render(<App />)
+    addMedia(fakeFile('a.mp4'))
+    const penButton = screen.getByRole('button', { name: /^Pen/ })
+
+    fireEvent.contextMenu(penButton)
+    const cyan = screen.getByRole('menuitemradio', { name: 'Cyan' })
+    fireEvent.click(cyan)
+    expect(useStudio.getState().drawColor).toBe('#22d3ee')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument() // closes after picking
+  })
+
+  it('turning on the pen from the toolbar turns off marquee-zoom, and vice versa', () => {
+    render(<App />)
+    addMedia(fakeFile('a.mp4'))
+    fireEvent.click(screen.getByRole('button', { name: /^Pen/ }))
+    expect(useStudio.getState().drawMode).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: /^Zoom/ }))
+    expect(useStudio.getState().zoomMode).toBe(true)
+    expect(useStudio.getState().drawMode).toBe(false)
   })
 
   it('loops by default, and the loop button reflects it', () => {
@@ -259,6 +309,15 @@ describe('keyboard shortcuts', () => {
     expect(useStudio.getState().showRenderTime).toBe(true)
     fireEvent.keyDown(window, { key: 't' })
     expect(useStudio.getState().showRenderTime).toBe(false)
+  })
+
+  it('p toggles the pen, and Escape leaves it', () => {
+    render(<App />)
+    expect(useStudio.getState().drawMode).toBe(false)
+    fireEvent.keyDown(window, { key: 'p' })
+    expect(useStudio.getState().drawMode).toBe(true)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(useStudio.getState().drawMode).toBe(false)
   })
 
   it('number keys set the column count', () => {

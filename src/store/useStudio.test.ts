@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectiveVolume, useStudio } from './useStudio'
 import { MAX_PANELS } from '../lib/guards'
-import type { MediaItem } from '../types'
+import { DEFAULT_PEN_COLOR, MAX_STROKES } from '../lib/draw'
+import type { MediaItem, Stroke } from '../types'
 
 function fakeFile(name: string, type = 'video/mp4', size = 4096): File {
   return { name, type, size, lastModified: 1_700_000_000_000 } as File
@@ -22,6 +23,9 @@ beforeEach(() => {
     fitMode: 'fit',
     columns: 'auto',
     showRenderTime: false,
+    strokes: [],
+    drawMode: false,
+    drawColor: DEFAULT_PEN_COLOR,
   })
   vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`)
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
@@ -134,6 +138,14 @@ describe('zoom', () => {
     expect(useStudio.getState().zoomMode).toBe(true)
     useStudio.getState().setZoomMode(false)
     expect(useStudio.getState().zoomMode).toBe(false)
+  })
+
+  it('turning on marquee mode turns off the pen - a drag can only mean one thing', () => {
+    useStudio.getState().toggleDrawMode()
+    expect(useStudio.getState().drawMode).toBe(true)
+    useStudio.getState().toggleZoomMode()
+    expect(useStudio.getState().zoomMode).toBe(true)
+    expect(useStudio.getState().drawMode).toBe(false)
   })
 })
 
@@ -314,5 +326,65 @@ describe('render time', () => {
     useStudio.getState().addFiles([fakeFile('a.mp4')])
     expect(() => useStudio.getState().setRenderTime('does-not-exist', '5s')).not.toThrow()
     expect(useStudio.getState().items[0]!.renderTime).toBe('')
+  })
+})
+
+describe('drawing', () => {
+  const stroke = (id: string, color = '#ffffff'): Stroke => ({
+    id,
+    color,
+    points: [
+      { x: 0.1, y: 0.1 },
+      { x: 0.2, y: 0.2 },
+    ],
+  })
+
+  it('starts empty, off, and on the app accent colour', () => {
+    expect(useStudio.getState().strokes).toEqual([])
+    expect(useStudio.getState().drawMode).toBe(false)
+    expect(useStudio.getState().drawColor).toBe(DEFAULT_PEN_COLOR)
+  })
+
+  it('toggles pen mode, and turning it on turns off marquee-zoom mode', () => {
+    useStudio.getState().toggleZoomMode()
+    expect(useStudio.getState().zoomMode).toBe(true)
+    useStudio.getState().toggleDrawMode()
+    expect(useStudio.getState().drawMode).toBe(true)
+    expect(useStudio.getState().zoomMode).toBe(false)
+    useStudio.getState().setDrawMode(false)
+    expect(useStudio.getState().drawMode).toBe(false)
+  })
+
+  it('changes the pen colour for strokes drawn from now on', () => {
+    useStudio.getState().setDrawColor('#22d3ee')
+    expect(useStudio.getState().drawColor).toBe('#22d3ee')
+  })
+
+  it('appends strokes in drawing order', () => {
+    useStudio.getState().addStroke(stroke('s1'))
+    useStudio.getState().addStroke(stroke('s2'))
+    expect(useStudio.getState().strokes.map((s) => s.id)).toEqual(['s1', 's2'])
+  })
+
+  it('retires the oldest stroke once the cap is exceeded, rather than growing unbounded', () => {
+    for (let i = 0; i < MAX_STROKES + 5; i++) useStudio.getState().addStroke(stroke(`s${i}`))
+    const ids = useStudio.getState().strokes.map((s) => s.id)
+    expect(ids).toHaveLength(MAX_STROKES)
+    expect(ids[0]).toBe('s5') // the first 5 quietly retired
+    expect(ids[ids.length - 1]).toBe(`s${MAX_STROKES + 4}`)
+  })
+
+  it('clears every stroke at once', () => {
+    useStudio.getState().addStroke(stroke('s1'))
+    useStudio.getState().addStroke(stroke('s2'))
+    useStudio.getState().clearStrokes()
+    expect(useStudio.getState().strokes).toEqual([])
+  })
+
+  it('clearing all panels also clears the drawings on top of them', () => {
+    useStudio.getState().addFiles([fakeFile('a.mp4')])
+    useStudio.getState().addStroke(stroke('s1'))
+    useStudio.getState().clearAll()
+    expect(useStudio.getState().strokes).toEqual([])
   })
 })

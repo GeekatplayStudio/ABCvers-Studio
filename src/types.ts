@@ -87,6 +87,18 @@ export interface Point {
   y: number
 }
 
+/**
+ * A single freehand annotation, drawn on the overlay that sits above every
+ * panel at once - not owned by any one panel, which is what lets a stroke
+ * (an arrow, say) cross panel boundaries to point from one to another.
+ */
+export interface Stroke {
+  id: string
+  color: string
+  /** Normalized 0..1 fractions of the drawing layer's own box, in drag order. */
+  points: Point[]
+}
+
 export interface Size {
   width: number
   height: number

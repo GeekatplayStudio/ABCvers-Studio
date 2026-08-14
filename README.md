@@ -6,7 +6,7 @@
 By **Geekatplay Studio** — *Vladimir Chopine*.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-e8813a.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-261%20passing-2e9e5b.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-303%20passing-2e9e5b.svg)](#testing)
 [![Built with React](https://img.shields.io/badge/react-18-1e2126.svg?logo=react)](https://react.dev)
 [![Built with Vite](https://img.shields.io/badge/vite-6-1e2126.svg?logo=vite)](https://vitejs.dev)
 [![TypeScript](https://img.shields.io/badge/typescript-strict-1e2126.svg?logo=typescript)](tsconfig.json)
@@ -38,6 +38,7 @@ Everything runs locally in your browser. **No file is ever uploaded anywhere.**
   - [Synchronized playback](#synchronized-playback)
   - [Audio](#audio)
   - [Synchronized zoom](#synchronized-zoom)
+  - [Drawing and annotations](#drawing-and-annotations)
   - [Media info](#media-info)
   - [Render time notes](#render-time-notes)
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -49,6 +50,7 @@ Everything runs locally in your browser. **No file is ever uploaded anywhere.**
   - [The sync engine](#the-sync-engine)
   - [Synchronized zoom geometry](#synchronized-zoom-geometry)
   - [Layout maths](#layout-maths)
+  - [The drawing layer](#the-drawing-layer)
   - [Performance](#performance)
 - [Guardrails](#guardrails)
 - [Testing](#testing)
@@ -69,6 +71,7 @@ Everything runs locally in your browser. **No file is ever uploaded anywhere.**
 | **Frame-accurate sync** | One transport drives every clip. Drift is corrected continuously. Loops by default. |
 | **Frame by frame, either way** | Single and ten-frame jogs from the footer, from any panel, or from the keyboard. |
 | **Synchronized zoom** | Marquee a detail in one panel; every panel magnifies the same region. |
+| **Draw across every panel** | One pen (`P`), eight colours, freehand strokes that can cross from one panel into another to point at something in a different clip. Pulses gently to hold attention, stays put through playback, one button clears it all. |
 | **Free or locked aspect** | Panels follow each source's own ratio, or lock all of them to 16:9, 9:16, 1:1, 4:3, 3:4, 21:9, 2.39:1 — with Fit or Fill. |
 | **Resizable panels** | Drag the divider between any two panels to trade width. |
 | **Per-panel + global audio** | Independent volume and mute per screen, multiplied by a master volume. Alt-click to solo. |
@@ -326,6 +329,32 @@ pixels, it means "the same part of the image" regardless of each source's
 resolution or each panel's on-screen size. A 4K master and a 720p proxy magnify
 the identical region.
 
+### Drawing and annotations
+
+For pointing something out, rather than measuring it - "look here", not "zoom
+here". Where synchronized zoom shows the same region in every panel, the pen
+does the opposite: it draws on top of **all panels and rows at once**, as one
+continuous canvas, so a single stroke can start inside one clip and end inside
+another.
+
+1. Click **Pen** in the toolbar (or press **P**). The cursor becomes a
+   crosshair over every panel.
+2. **Drag to draw** - freehand, smoothed as you go. Circle a detail in one
+   panel, then keep dragging straight across the seam into the next panel to
+   arrow at something there. There is no per-panel boundary to the canvas.
+3. **Right-click the Pen button** for a colour picker - white, black, orange,
+   cyan, red, yellow, green, magenta. The swatch on the button always shows the
+   current colour, and it carries over to every stroke you draw after.
+4. The **trash button** next to Pen clears every drawing on the stage in one
+   click, and is disabled when there is nothing to clear.
+
+Every stroke pulses gently (a slow grow-and-shrink, purely in CSS) so it keeps
+drawing the eye even on a static frame. Drawings are their own layer, entirely
+separate from playback - they stay exactly where you drew them through play,
+pause, scrub, and looping, until you clear them or close the tab. Pen mode and
+zoom-marquee mode both want to own a drag over the panels, so turning one on
+turns the other off; **Esc** leaves either one.
+
 ### Media info
 
 Under each panel (toggle with **I**, or the info button):
@@ -398,11 +427,13 @@ localStorage or server behind it.
 | `Home` / `End` | Go to start / end |
 | `L` | Loop (on by default) |
 | `Z` | Zoom marquee mode |
-| `Esc` | Leave marquee mode |
+| `Esc` | Leave marquee/pen mode |
 | `R` | Reset zoom |
 | `+` / `-` | Zoom in / out |
 | `Ctrl/⌘ + wheel` | Zoom around the cursor |
 | Drag (while zoomed) | Pan all panels together |
+| `P` | Pen (draw over every panel) |
+| Right-click Pen | Choose a pen colour |
 | `M` | Global mute |
 | `Alt + click` speaker | Solo that panel |
 | `I` | Toggle info strips |
@@ -600,6 +631,33 @@ depending on panel width at all (see `.meta` in `global.css`), and the cap in
 `fitRow` bounds the damage regardless, in case anything else in a footer ever
 grows unexpectedly. `layout.test.ts` pins the cap's behaviour directly.
 
+### The drawing layer
+
+[`src/components/DrawingLayer.tsx`](src/components/DrawingLayer.tsx) is a
+single SVG overlay sized to the whole stage - every row, every panel - rather
+than one canvas per panel. That is a deliberate architectural choice, not an
+implementation shortcut: a per-panel canvas cannot render a stroke that
+crosses from one panel into another, and crossing panels is the entire point
+of "circle this, then arrow over to that". Points are stored as fractions
+(0–1) of the drawing layer's own bounding box, not screen pixels or panel-
+relative coordinates, so a stroke stays roughly in place across a window
+resize and is completely independent of each panel's own zoom/pan transform.
+
+Freehand input is smoothed into a curve with a quadratic Bezier through each
+pair of points' midpoint ([`src/lib/draw.ts`](src/lib/draw.ts),
+`smoothPath`) - a standard, dependency-free way to turn jittery pointer
+samples into a clean line. The pulse is pure CSS (`transform-box: fill-box`
+plus a `scale`/`opacity` keyframe animation), so each stroke pulses around its
+own centre with no per-frame JavaScript at all.
+
+The in-progress stroke's point list is kept in a `ref`, not `state`: a stroke
+is only committed to the store from the plain `pointerup` handler, never from
+inside a `setState` updater, because React 18 StrictMode double-invokes
+updater functions in development and that would silently duplicate the
+stroke. Pen mode and zoom-marquee mode are mutually exclusive at the store
+level - each one turning on switches the other off - since both claim a drag
+gesture over the same panels.
+
 ### Performance
 
 The tool has to stay smooth with a dozen decoders running, so:
@@ -648,6 +706,10 @@ and covered by tests.
   ever trusted after its bytes are checked for a real JPEG start-of-image
   marker — a corrupted offset fails cleanly instead of being handed to `<img>`
   as if it were valid.
+- **Drawings are capped at 300 strokes**, oldest evicted first, and at 4000
+  points per stroke, so an unbounded drag session cannot grow the SVG without
+  limit. Near-duplicate points closer than 0.4% of the canvas apart are
+  skipped during a slow drag, keeping paths lean without visibly changing them.
 
 ---
 
@@ -659,7 +721,7 @@ npm run test:watch
 npm run coverage  # v8 coverage report in ./coverage
 ```
 
-**261 tests across 16 files**, all passing. The suite is weighted towards the
+**303 tests across 19 files**, all passing. The suite is weighted towards the
 logic that is hard to eyeball:
 
 | File | Covers |
@@ -672,10 +734,13 @@ logic that is hard to eyeball:
 | `lib/format.test.ts` | Byte scaling, clock and SMPTE timecode (including the floating-point edges that make `62.48` print `.479`), duration, aspect reduction, middle truncation. |
 | `lib/media.test.ts` | File intake and EXR/DNG decoder routing, panel limit accounting, object-URL failures, frame-rate median and broadcast-rate snapping, aspect fallbacks, the priming probe itself (real samples, exact restoration, normal speed, autoplay-refused fallback, never two clips at once), and the `loadExr`/`loadDngPreview` fetch-to-decode orchestration against the same real fixtures. |
 | `lib/layout.test.ts` | Auto columns, row chunking, aspect-derived weights, splitter conservation, and `fitRow`: shared height, integer edges, height- vs width-constrained rows, strip reservation, no overflow, and the footer-reservation cap that stops a tall info strip from shrinking a panel's picture without bound. |
+| `lib/draw.test.ts` | Pen colours (contents, uniqueness, default), point distance, freehand-smoothing maths (empty/single-point/multi-point/deterministic), coordinate scaling, stroke-id uniqueness, and the guardrail constants. |
 | `components/Stage.test.tsx` | The edge-to-edge guarantee against the real DOM: a 16:9 and a 1:1 panel come out 768x432 and 432x432 sharing one height, widths summing to the full row; mixed orientations keep integer edges; locked aspect gives identical boxes; short rows are height-constrained; multi-row splitting. |
-| `store/useStudio.test.ts` | Add/remove/reorder, URL revocation, metadata, zoom state, the volume/mute/solo matrix, layout state, toasts. |
+| `components/DrawingLayer.test.tsx` | Inert (no drag recorded) with the pen off, active with it on; a drag commits a stroke in the current colour at the correct normalized coordinates; near-duplicate points are thinned; a click with no movement still leaves a one-point dot; right-button drags are ignored; every persisted stroke renders; the native context menu is suppressed only while the pen is active. |
+| `components/PenColorPicker.test.tsx` | Every configured colour listed, the current one marked checked, selecting one closes the popover, Escape and outside-click both close it, and the same click that opened it does not immediately close it again. |
+| `store/useStudio.test.ts` | Add/remove/reorder, URL revocation, metadata, zoom state, the volume/mute/solo matrix, layout state, toasts, and the drawing state: strokes append in order, retire past the 300-stroke cap, clear individually or via `clearAll()`, and pen/zoom mode are mutually exclusive. |
 | `components/*.test.tsx` | Scrubber, volume and exposure pointer/keyboard interaction and ARIA; media info rendering for video, stills, EXR, DNG, loading and error states; the render-time overlay's value binding and that it stops its own pointer events from reaching the marquee/pan layer underneath it. |
-| `App.test.tsx` | Whole-shell integration: rendering panels, closing, reordering, layout, aspect and fit controls, zoom controls, rejection toasts, loop default, both coffee links, frame stepping from the footer and from panels, the render-time boxes (hidden by default, values survive hiding, gone when the panel closes, and typing a "t" while entering one doesn't toggle them away mid-word), and every keyboard shortcut. |
+| `App.test.tsx` | Whole-shell integration: rendering panels, closing, reordering, layout, aspect and fit controls, zoom controls, rejection toasts, loop default, both coffee links, frame stepping from the footer and from panels, the render-time boxes (hidden by default, values survive hiding, gone when the panel closes, and typing a "t" while entering one doesn't toggle them away mid-word), drawing across panels and clearing it, the pen colour picker, pen/zoom mode exclusivity, and every keyboard shortcut. |
 
 `src/test/setup.ts` fills the jsdom gaps — media playback, object URLs,
 `ResizeObserver`, pointer capture, and a `PointerEvent` polyfill (without which
@@ -704,6 +769,7 @@ src/
     dng.ts                 TIFF/DNG embedded-preview extraction
     guards.ts              Limits, classification, numeric coercion
     format.ts              Display formatters
+    draw.ts                Pen colours, freehand smoothing, stroke guards
     fixtures/              Real EXR files + hand-built DNG/TIFF files, for tests
   store/
     useStudio.ts           Zustand session state (no playhead - see above)
@@ -722,6 +788,8 @@ src/
     VolumeControl.tsx      Speaker + level
     ExposureControl.tsx    EXR exposure slider, centred on zero
     RenderTimeOverlay.tsx  Editable render-time note, shown on every panel
+    DrawingLayer.tsx        Stage-wide pen overlay, pulsing, cross-panel strokes
+    PenColorPicker.tsx      Right-click colour popover for the pen
     MediaInfo.tsx          Metadata strip
     TransportBar.tsx       Master transport
     EmptyState.tsx         Cold start

@@ -7,11 +7,12 @@
  */
 
 import { create } from 'zustand'
-import type { AspectKey, FitMode, MediaItem, MediaMeta, Rect } from '../types'
+import type { AspectKey, FitMode, MediaItem, MediaMeta, Rect, Stroke } from '../types'
 import { intakeFiles, type RejectedFile } from '../lib/media'
 import { clamp, MAX_PANELS, safeExposure, safeVolume } from '../lib/guards'
 import { clampRect, FULL_RECT, isFullRect, zoomRectBy } from '../lib/zoom'
 import { panelWeight, resizePair } from '../lib/layout'
+import { DEFAULT_PEN_COLOR, MAX_STROKES } from '../lib/draw'
 
 export interface Toast {
   id: string
@@ -33,6 +34,9 @@ export interface StudioState {
   showOverlayName: boolean
   showRenderTime: boolean
   toasts: Toast[]
+  strokes: Stroke[]
+  drawMode: boolean
+  drawColor: string
 
   addFiles: (files: readonly File[]) => void
   removeItem: (id: string) => void
@@ -71,6 +75,12 @@ export interface StudioState {
 
   pushToast: (message: string, tone?: Toast['tone']) => void
   dismissToast: (id: string) => void
+
+  setDrawMode: (on: boolean) => void
+  toggleDrawMode: () => void
+  setDrawColor: (color: string) => void
+  addStroke: (stroke: Stroke) => void
+  clearStrokes: () => void
 }
 
 let toastSeq = 0
@@ -107,6 +117,9 @@ export const useStudio = create<StudioState>()((set, get) => ({
   showOverlayName: true,
   showRenderTime: false,
   toasts: [],
+  strokes: [],
+  drawMode: false,
+  drawColor: DEFAULT_PEN_COLOR,
 
   addFiles: (files) => {
     if (!files || files.length === 0) return
@@ -127,7 +140,7 @@ export const useStudio = create<StudioState>()((set, get) => ({
 
   clearAll: () => {
     get().items.forEach(releaseUrl)
-    set({ items: [], zoom: null, zoomMode: false })
+    set({ items: [], zoom: null, zoomMode: false, strokes: [] })
   },
 
   moveItem: (id, direction) => {
@@ -197,9 +210,13 @@ export const useStudio = create<StudioState>()((set, get) => ({
 
   resetZoom: () => set({ zoom: null }),
 
-  setZoomMode: (on) => set({ zoomMode: on }),
+  // Marquee-zoom and the pen both claim drag-to-do-something over the
+  // panels, so only one can be active at a time - turning one on turns the
+  // other off, rather than leaving it ambiguous what a drag means.
+  setZoomMode: (on) => set(on ? { zoomMode: true, drawMode: false } : { zoomMode: false }),
 
-  toggleZoomMode: () => set((state) => ({ zoomMode: !state.zoomMode })),
+  toggleZoomMode: () =>
+    set((state) => (state.zoomMode ? { zoomMode: false } : { zoomMode: true, drawMode: false })),
 
   setItemVolume: (id, volume) => {
     const value = safeVolume(volume)
@@ -288,6 +305,19 @@ export const useStudio = create<StudioState>()((set, get) => ({
   },
 
   dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+
+  setDrawMode: (on) => set(on ? { drawMode: true, zoomMode: false } : { drawMode: false }),
+
+  toggleDrawMode: () =>
+    set((state) => (state.drawMode ? { drawMode: false } : { drawMode: true, zoomMode: false })),
+
+  setDrawColor: (color) => set({ drawColor: color }),
+
+  addStroke: (stroke) => {
+    set((state) => ({ strokes: [...state.strokes, stroke].slice(-MAX_STROKES) }))
+  },
+
+  clearStrokes: () => set({ strokes: [] }),
 }))
 
 /** Volume a given panel should actually output, after global controls. */

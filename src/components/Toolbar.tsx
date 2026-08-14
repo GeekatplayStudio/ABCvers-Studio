@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useStudio } from '../store/useStudio'
 import { ASPECT_OPTIONS } from '../lib/layout'
 import { ACCEPT_ATTRIBUTE, MAX_PANELS } from '../lib/guards'
@@ -7,6 +7,7 @@ import {
   FullscreenIcon,
   HelpIcon,
   InfoIcon,
+  PenIcon,
   PlusIcon,
   ResetIcon,
   StopwatchIcon,
@@ -14,6 +15,7 @@ import {
   ZoomIcon,
 } from './Icons'
 import { CoffeeLink } from './CoffeeLink'
+import { PenColorPicker } from './PenColorPicker'
 import type { AspectKey, FitMode } from '../types'
 
 const COLUMN_OPTIONS: (number | 'auto')[] = ['auto', 1, 2, 3, 4, 5, 6]
@@ -28,6 +30,9 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
   const zoomMode = useStudio((state) => state.zoomMode)
   const showInfo = useStudio((state) => state.showInfo)
   const showRenderTime = useStudio((state) => state.showRenderTime)
+  const drawMode = useStudio((state) => state.drawMode)
+  const drawColor = useStudio((state) => state.drawColor)
+  const strokeCount = useStudio((state) => state.strokes.length)
   const addFiles = useStudio((state) => state.addFiles)
   const clearAll = useStudio((state) => state.clearAll)
   const setAspect = useStudio((state) => state.setAspect)
@@ -37,6 +42,11 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
   const resetZoom = useStudio((state) => state.resetZoom)
   const toggleInfo = useStudio((state) => state.toggleInfo)
   const toggleRenderTime = useStudio((state) => state.toggleRenderTime)
+  const toggleDrawMode = useStudio((state) => state.toggleDrawMode)
+  const setDrawColor = useStudio((state) => state.setDrawColor)
+  const clearStrokes = useStudio((state) => state.clearStrokes)
+
+  const [colorPickerOpen, setColorPickerOpen] = useState(false)
 
   const onPick = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -187,6 +197,38 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
         >
           <ResetIcon size={15} />
           Reset
+        </button>
+        <div className="pen-anchor">
+          <button
+            type="button"
+            className="btn"
+            aria-pressed={drawMode}
+            onClick={toggleDrawMode}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setColorPickerOpen(true)
+            }}
+            disabled={items.length === 0}
+            title="Draw over any panel to point something out (P) - right-click for colour"
+            style={{ '--pen-color': drawColor } as React.CSSProperties}
+          >
+            <PenIcon size={15} />
+            Pen
+            <span className="pen-swatch" aria-hidden="true" />
+          </button>
+          {colorPickerOpen && (
+            <PenColorPicker color={drawColor} onSelect={setDrawColor} onClose={() => setColorPickerOpen(false)} />
+          )}
+        </div>
+        <button
+          type="button"
+          className="btn btn--icon"
+          onClick={clearStrokes}
+          disabled={strokeCount === 0}
+          title="Clear every drawing"
+          aria-label="Clear every drawing"
+        >
+          <TrashIcon size={15} />
         </button>
         <button
           type="button"
