@@ -21,11 +21,8 @@ if (!COMMANDS.has(command)) {
   process.exit(2)
 }
 
-const isWindows = process.platform === 'win32'
-const file = isWindows ? 'powershell' : 'bash'
-const args = isWindows
-  ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(here, `${command}.ps1`), ...rest]
-  : [join(here, `${command}.sh`), ...rest]
+const file = 'bash'
+const args = [join(here, `${command}.sh`), ...rest]
 
 const child = spawn(file, args, { stdio: 'inherit' })
 child.on('error', (error) => {

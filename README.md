@@ -73,18 +73,9 @@ git clone https://github.com/GeekatplayStudio/ABCvers-Studio.git
 cd ABCvers-Studio
 ```
 
-### The three scripts
+### Available scripts
 
-On Windows, double-click them or run them from a terminal — no PowerShell policy
-change needed, the wrappers handle it:
-
-```
-install.cmd     install dependencies
-start.cmd       build, serve, and open the studio
-stop.cmd        shut the server down
-```
-
-On macOS and Linux:
+Run shell scripts directly:
 
 ```bash
 ./scripts/install.sh
@@ -92,7 +83,7 @@ On macOS and Linux:
 ./scripts/stop.sh
 ```
 
-Or from npm, on any platform (the dispatcher picks the right script for you):
+Or via npm:
 
 ```bash
 npm run app:install
@@ -529,13 +520,12 @@ jsdom silently drops `clientX` and every drag test reads position zero).
 ## Project layout
 
 ```
-install.cmd start.cmd stop.cmd   Windows entry points
 scripts/
-  common.ps1 / common.sh         Node check, port probing, server state
-  install.ps1 / install.sh       Dependency install
-  start.ps1  / start.sh          Build + serve, detached, with a health wait
-  stop.ps1   / stop.sh           Shut down by recorded pid, port as fallback
-  run.mjs                        npm run app:* -> the right script per platform
+  common.sh              Node check, port probing, server state
+  install.sh             Dependency install
+  start.sh               Build + serve, detached, with a health wait
+  stop.sh                Shut down by recorded pid, port as fallback
+  run.mjs                npm run app:* dispatcher
 src/
   types.ts                 Shared domain types
   main.tsx                 Entry point
@@ -580,9 +570,9 @@ src/
 
 | Script | Purpose |
 |---|---|
-| `install.cmd` / `scripts/install.sh` / `npm run app:install` | Install dependencies |
-| `start.cmd` / `scripts/start.sh` / `npm run app:start` | Build and serve, detached |
-| `stop.cmd` / `scripts/stop.sh` / `npm run app:stop` | Stop the server |
+| `./scripts/install.sh` / `npm run app:install` | Install dependencies |
+| `./scripts/start.sh` / `npm run app:start` | Build and serve, detached |
+| `./scripts/stop.sh` / `npm run app:stop` | Stop the server |
 | `npm run dev` | Dev server with hot reload |
 | `npm run build` | Typecheck, then bundle to `./dist` |
 | `npm run preview` | Serve the built bundle |
@@ -599,14 +589,14 @@ src/
 ## Troubleshooting
 
 **`start` says the port is already in use.** Something else has 4173. Run
-`stop.cmd`, or start elsewhere with `-Port 8080` / `--port 8080`.
+`./scripts/stop.sh`, or start elsewhere with `--port 8080`.
 
 **`start` fails during the build.** That is the typecheck refusing to ship a
-broken bundle — the error above the failure is the real one. `-SkipBuild` will
+broken bundle — the error above the failure is the real one. `--skip-build` will
 serve the last good `dist/` if you need the app up right now.
 
 **`stop` says nothing was running but the browser still loads the page.** You are
-looking at a cached tab, or a server started some other way. `stop.cmd -All`
+looking at a cached tab, or a server started some other way. `./scripts/stop.sh --all`
 releases both the preview and dev ports.
 
 **A panel shows "could not be decoded".** The browser has no decoder for that
