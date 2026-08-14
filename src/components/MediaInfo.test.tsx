@@ -16,6 +16,8 @@ const video: MediaItem = {
   volume: 1,
   muted: false,
   weight: 1,
+  imageDecoder: null,
+  exposure: 0,
 }
 
 describe('MediaInfo', () => {
@@ -60,5 +62,60 @@ describe('MediaInfo', () => {
   it('surfaces a decode error', () => {
     render(<MediaInfo item={{ ...video, status: 'error', error: 'unsupported codec' }} />)
     expect(screen.getByText('unsupported codec')).toBeInTheDocument()
+  })
+
+  it('labels an EXR panel by format rather than its unhelpful MIME type', () => {
+    render(
+      <MediaInfo
+        item={{
+          ...video,
+          id: 'e1',
+          kind: 'image',
+          name: 'beauty.exr',
+          mimeType: '',
+          imageDecoder: 'exr',
+          meta: { width: 1920, height: 1080, duration: 0, fps: 0 },
+        }}
+      />,
+    )
+    expect(screen.getByText('OpenEXR (HDR)')).toBeInTheDocument()
+  })
+
+  it('shows the true sensor size for a DNG whose preview is smaller than the sensor', () => {
+    render(
+      <MediaInfo
+        item={{
+          ...video,
+          id: 'd1',
+          kind: 'image',
+          name: 'IMG_0142.dng',
+          mimeType: '',
+          imageDecoder: 'dng',
+          meta: { width: 1616, height: 1080, duration: 0, fps: 0, sensorWidth: 6048, sensorHeight: 4032 },
+        }}
+      />,
+    )
+    expect(screen.getByText('DNG (RAW preview)')).toBeInTheDocument()
+    expect(screen.getByText('Sensor')).toBeInTheDocument()
+    expect(screen.getByText('6048 x 4032')).toBeInTheDocument()
+    // and the resolution field still reports what is actually on screen, not the sensor
+    expect(screen.getByText('1616 x 1080')).toBeInTheDocument()
+  })
+
+  it('hides the sensor field when the DNG preview already matches the sensor size', () => {
+    render(
+      <MediaInfo
+        item={{
+          ...video,
+          id: 'd2',
+          kind: 'image',
+          name: 'full-res.dng',
+          mimeType: '',
+          imageDecoder: 'dng',
+          meta: { width: 6048, height: 4032, duration: 0, fps: 0, sensorWidth: 6048, sensorHeight: 4032 },
+        }}
+      />,
+    )
+    expect(screen.queryByText('Sensor')).not.toBeInTheDocument()
   })
 })

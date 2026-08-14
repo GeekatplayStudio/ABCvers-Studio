@@ -24,6 +24,8 @@ const item = (width: number, height: number, weight: number | null = null): Medi
   volume: 1,
   muted: false,
   weight,
+  imageDecoder: null,
+  exposure: 0,
 })
 
 describe('columns', () => {

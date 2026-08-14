@@ -7,8 +7,16 @@ export type MediaKind = 'video' | 'image'
 
 export type MediaStatus = 'loading' | 'ready' | 'error'
 
+/**
+ * How an 'image' item's pixels actually get decoded. `native` is a plain
+ * `<img>` - the overwhelming majority of stills. `exr` and `dng` route
+ * through the hand-written decoders in `lib/exr.ts` / `lib/dng.ts`, since no
+ * browser decodes either format itself. Always `null` for video items.
+ */
+export type ImageDecoder = 'native' | 'exr' | 'dng'
+
 export interface MediaMeta {
-  /** Intrinsic pixel width of the decoded media. */
+  /** Intrinsic pixel width of the decoded media (the *displayed* picture - a DNG preview's own size, not necessarily the sensor's). */
   width: number
   /** Intrinsic pixel height of the decoded media. */
   height: number
@@ -16,6 +24,12 @@ export interface MediaMeta {
   duration: number
   /** Estimated frames per second. 0 for images until measured. */
   fps: number
+  /**
+   * True capture resolution, only set for a DNG whose embedded preview is
+   * smaller than the sensor - informational only, never used for layout.
+   */
+  sensorWidth?: number
+  sensorHeight?: number
 }
 
 export interface MediaItem {
@@ -36,6 +50,10 @@ export interface MediaItem {
   volume: number
   /** Per-panel mute flag. */
   muted: boolean
+  /** null for video; for images, which decode path renders this item. */
+  imageDecoder: ImageDecoder | null
+  /** EXR exposure adjustment, in stops. Meaningless outside imageDecoder 'exr'. */
+  exposure: number
   /**
    * Width override set by dragging a splitter, as a width-per-unit-height.
    * `null` means "follow the media / locked aspect ratio", which is what keeps

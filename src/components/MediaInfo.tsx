@@ -27,11 +27,20 @@ function Field({ label, value, title, wide }: FieldProps) {
   )
 }
 
+const TYPE_LABEL: Record<'exr' | 'dng', string> = {
+  exr: 'OpenEXR (HDR)',
+  dng: 'DNG (RAW preview)',
+}
+
 /** The metadata strip printed under every panel. */
 export const MediaInfo = memo(function MediaInfo({ item }: { item: MediaItem }) {
   const meta = item.meta
   const isVideo = item.kind === 'video'
   const megapixels = meta && meta.width && meta.height ? (meta.width * meta.height) / 1e6 : 0
+  const hasSensorSize =
+    meta?.sensorWidth && meta?.sensorHeight && (meta.sensorWidth !== meta.width || meta.sensorHeight !== meta.height)
+  const typeLabel =
+    item.imageDecoder === 'exr' || item.imageDecoder === 'dng' ? TYPE_LABEL[item.imageDecoder] : item.mimeType || '--'
 
   return (
     <dl className="meta" data-testid={`meta-${item.id}`}>
@@ -54,8 +63,15 @@ export const MediaInfo = memo(function MediaInfo({ item }: { item: MediaItem }) 
       ) : (
         <Field label="Pixels" value={megapixels ? `${megapixels.toFixed(2)} MP` : '--'} />
       )}
+      {hasSensorSize && (
+        <Field
+          label="Sensor"
+          value={formatResolution(meta!.sensorWidth!, meta!.sensorHeight!)}
+          title="True capture resolution - the picture shown is the DNG's embedded preview, not the full RAW"
+        />
+      )}
       <Field label="Size" value={formatBytes(item.size)} />
-      <Field label="Type" value={item.mimeType || '--'} />
+      <Field label="Type" value={typeLabel} />
       <Field label="Modified" value={formatDate(item.lastModified)} />
       {item.status === 'error' && <Field label="Error" value={item.error ?? 'Failed to decode'} wide />}
     </dl>

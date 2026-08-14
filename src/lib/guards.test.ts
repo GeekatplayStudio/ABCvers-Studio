@@ -4,8 +4,10 @@ import {
   clamp,
   extensionOf,
   GuardError,
+  imageDecoderForExtension,
   invariant,
   MAX_FILE_BYTES,
+  safeExposure,
   safeFps,
   safeTime,
   safeVolume,
@@ -22,6 +24,12 @@ describe('classifyFile', () => {
   it('falls back to the extension when the OS gave no MIME type', () => {
     expect(classifyFile(file('render.mkv'))).toEqual({ ok: true, kind: 'video' })
     expect(classifyFile(file('plate.EXR.tiff'))).toEqual({ ok: true, kind: 'image' })
+  })
+
+  it('accepts EXR and DNG by extension - browsers report no useful MIME type for either', () => {
+    expect(classifyFile(file('beauty_pass.exr'))).toEqual({ ok: true, kind: 'image' })
+    expect(classifyFile(file('IMG_0142.dng'))).toEqual({ ok: true, kind: 'image' })
+    expect(classifyFile(file('BEAUTY.EXR'))).toEqual({ ok: true, kind: 'image' }) // case-insensitive
   })
 
   it('rejects unknown, empty and oversized files with a reason', () => {
@@ -76,5 +84,34 @@ describe('invariant', () => {
   it('throws a GuardError on a falsy condition', () => {
     expect(() => invariant(false, 'boom')).toThrow(GuardError)
     expect(() => invariant(1, 'fine')).not.toThrow()
+  })
+})
+
+describe('imageDecoderForExtension', () => {
+  it('routes EXR and DNG to their own decoders, case-insensitively', () => {
+    expect(imageDecoderForExtension('beauty.exr')).toBe('exr')
+    expect(imageDecoderForExtension('BEAUTY.EXR')).toBe('exr')
+    expect(imageDecoderForExtension('IMG_0142.dng')).toBe('dng')
+    expect(imageDecoderForExtension('IMG_0142.DNG')).toBe('dng')
+  })
+
+  it('leaves every other image extension on the plain <img> path', () => {
+    expect(imageDecoderForExtension('photo.png')).toBe('native')
+    expect(imageDecoderForExtension('photo.jpg')).toBe('native')
+    expect(imageDecoderForExtension('photo.tiff')).toBe('native')
+    expect(imageDecoderForExtension('no-extension')).toBe('native')
+  })
+})
+
+describe('safeExposure', () => {
+  it('clamps to the supported stop range', () => {
+    expect(safeExposure(100)).toBe(8)
+    expect(safeExposure(-100)).toBe(-8)
+    expect(safeExposure(1.5)).toBeCloseTo(1.5)
+  })
+
+  it('discards non-finite input back to zero adjustment, same as every other safe* coercion here', () => {
+    expect(safeExposure(Number.NaN)).toBe(0)
+    expect(safeExposure(Number.POSITIVE_INFINITY)).toBe(0)
   })
 })

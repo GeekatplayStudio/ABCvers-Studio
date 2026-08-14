@@ -1,12 +1,14 @@
-import { memo, useCallback, useEffect, useRef } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { MediaItem } from '../types'
 import { effectiveVolume, useStudio } from '../store/useStudio'
 import { syncEngine } from '../lib/sync'
-import { aspectOf, metaFromImage, metaFromVideo, primeFps } from '../lib/media'
+import { aspectOf, loadDngPreview, loadExr, metaFromImage, metaFromVideo, primeFps } from '../lib/media'
+import { tonemapToImageData, type DecodedExr } from '../lib/exr'
 import { MediaSurface } from './MediaSurface'
 import { MediaInfo } from './MediaInfo'
 import { Scrubber } from './Scrubber'
 import { VolumeControl } from './VolumeControl'
+import { ExposureControl } from './ExposureControl'
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -34,6 +36,7 @@ export const MediaPanel = memo(function MediaPanel({
   footerRef,
 }: MediaPanelProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const showInfo = useStudio((state) => state.showInfo)
   const showOverlayName = useStudio((state) => state.showOverlayName)
   const globalVolume = useStudio((state) => state.globalVolume)
@@ -46,8 +49,11 @@ export const MediaPanel = memo(function MediaPanel({
   const setItemVolume = useStudio((state) => state.setItemVolume)
   const toggleItemMute = useStudio((state) => state.toggleItemMute)
   const soloItem = useStudio((state) => state.soloItem)
+  const setExposure = useStudio((state) => state.setExposure)
 
   const isVideo = item.kind === 'video'
+  const isExr = item.imageDecoder === 'exr'
+  const isDng = item.imageDecoder === 'dng'
   const aspect = aspectOf(item)
   const duration = item.meta?.duration ?? 0
 
@@ -112,6 +118,75 @@ export const MediaPanel = memo(function MediaPanel({
     [item.id, setMeta],
   )
 
+  // ---- EXR: decode once per file, then just re-tonemap on exposure changes -
+  const [exrDecoded, setExrDecoded] = useState<DecodedExr | null>(null)
+  useEffect(() => {
+    if (!isExr) return
+    let cancelled = false
+    setExrDecoded(null)
+    loadExr(item.url)
+      .then((decoded) => {
+        if (cancelled) return
+        setExrDecoded(decoded)
+        setMeta(item.id, { width: decoded.width, height: decoded.height, duration: 0, fps: 0 })
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setStatus(item.id, 'error', error instanceof Error ? error.message : 'Could not decode this EXR')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isExr, item.id, item.url, setMeta, setStatus])
+
+  // Redraws whenever the decoded data or the exposure slider changes -
+  // cheap, since it is only re-tonemapping already-decoded floats, not
+  // re-parsing the file.
+  useEffect(() => {
+    if (!isExr || !exrDecoded) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    canvas.width = exrDecoded.width
+    canvas.height = exrDecoded.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.putImageData(tonemapToImageData(exrDecoded, item.exposure), 0, 0)
+  }, [isExr, exrDecoded, item.exposure])
+
+  // ---- DNG: extract the embedded preview JPEG and point a plain <img> at it
+  const [dngPreviewUrl, setDngPreviewUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!isDng) return
+    let cancelled = false
+    let createdUrl: string | null = null
+    setDngPreviewUrl(null)
+    loadDngPreview(item.url)
+      .then((preview) => {
+        if (cancelled) {
+          URL.revokeObjectURL(preview.previewUrl)
+          return
+        }
+        createdUrl = preview.previewUrl
+        setDngPreviewUrl(preview.previewUrl)
+        setMeta(item.id, {
+          width: preview.previewWidth,
+          height: preview.previewHeight,
+          duration: 0,
+          fps: 0,
+          sensorWidth: preview.sensorWidth,
+          sensorHeight: preview.sensorHeight,
+        })
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setStatus(item.id, 'error', error instanceof Error ? error.message : 'Could not read this DNG')
+      })
+    return () => {
+      cancelled = true
+      if (createdUrl) URL.revokeObjectURL(createdUrl)
+    }
+  }, [isDng, item.id, item.url, setMeta, setStatus])
+
   const bindScrubber = useCallback(
     (setTime: (time: number) => void) => syncEngine.subscribe((time) => setTime(time)),
     [],
@@ -163,6 +238,30 @@ export const MediaPanel = memo(function MediaPanel({
               onError={onError}
               data-testid={`video-${item.id}`}
             />
+          ) : isExr ? (
+            // No <img> involved: this is decoded and tone-mapped by hand in
+            // lib/exr.ts, since no browser can open an EXR file itself.
+            <canvas
+              ref={canvasRef}
+              className="panel__media"
+              role="img"
+              aria-label={item.name}
+              data-testid={`exr-${item.id}`}
+            />
+          ) : isDng ? (
+            // Never the raw DNG bytes - `dngPreviewUrl` is the embedded JPEG
+            // preview lib/dng.ts found and extracted, which is all any
+            // browser can actually display without a full RAW pipeline.
+            dngPreviewUrl && (
+              <img
+                className="panel__media"
+                src={dngPreviewUrl}
+                alt={item.name}
+                draggable={false}
+                onError={onError}
+                data-testid={`dng-${item.id}`}
+              />
+            )
           ) : (
             <img
               className="panel__media"
@@ -239,6 +338,17 @@ export const MediaPanel = memo(function MediaPanel({
                 compact
               />
             </>
+          ) : isExr ? (
+            <ExposureControl
+              value={item.exposure}
+              onChange={(stops) => setExposure(item.id, stops)}
+              label={item.name}
+              compact
+            />
+          ) : isDng ? (
+            <div className="panel__still" title={`Sensor: ${item.meta?.sensorWidth ?? '?'} x ${item.meta?.sensorHeight ?? '?'}`}>
+              RAW preview
+            </div>
           ) : (
             <div className="panel__still">still image</div>
           )}

@@ -6,7 +6,7 @@
 By **Geekatplay Studio** — *Vladimir Chopine*.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-e8813a.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-183%20passing-2e9e5b.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-245%20passing-2e9e5b.svg)](#testing)
 [![Built with React](https://img.shields.io/badge/react-18-1e2126.svg?logo=react)](https://react.dev)
 [![Built with Vite](https://img.shields.io/badge/vite-6-1e2126.svg?logo=vite)](https://vitejs.dev)
 [![TypeScript](https://img.shields.io/badge/typescript-strict-1e2126.svg?logo=typescript)](tsconfig.json)
@@ -41,6 +41,9 @@ Everything runs locally in your browser. **No file is ever uploaded anywhere.**
   - [Media info](#media-info)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Supported formats](#supported-formats)
+  - [HDR and log-encoded video](#hdr-and-log-encoded-video)
+  - [EXR](#exr)
+  - [DNG](#dng)
 - [How it works](#how-it-works)
   - [The sync engine](#the-sync-engine)
   - [Synchronized zoom geometry](#synchronized-zoom-geometry)
@@ -67,7 +70,8 @@ Everything runs locally in your browser. **No file is ever uploaded anywhere.**
 | **Free or locked aspect** | Panels follow each source's own ratio, or lock all of them to 16:9, 9:16, 1:1, 4:3, 3:4, 21:9, 2.39:1 — with Fit or Fill. |
 | **Resizable panels** | Drag the divider between any two panels to trade width. |
 | **Per-panel + global audio** | Independent volume and mute per screen, multiplied by a master volume. Alt-click to solo. |
-| **Full metadata** | Name, resolution, aspect, duration, frame rate, frame count, size, MIME type, modified date. |
+| **EXR and DNG, for real** | EXR is decoded and tone-mapped in the browser, with a live exposure slider. DNG previews the embedded JPEG every real-world RAW file already carries. Neither format has any native browser support - both are hand-written parsers. |
+| **Full metadata** | Name, resolution, aspect, duration, frame rate, frame count, size, MIME type, modified date - plus true sensor size for a DNG. |
 | **Drag and drop** | Drop files or whole folders anywhere on the window, or use the file picker. |
 | **Dark, minimal UI** | Near-black chrome so the footage is the only saturated thing on screen. |
 | **Fully local** | Object URLs only. Nothing leaves the machine. |
@@ -370,10 +374,11 @@ Under each panel (toggle with **I**, or the info button):
 | **Frame rate** | Measured, not guessed — see below. Shows `probing…` until measured. |
 | **Frames** | Total frame count, from duration x frame rate. |
 | **Pixels** | Stills only — megapixels. |
+| **Sensor** | DNG only, and only shown when it differs from Resolution — the true sensor capture size, versus the embedded preview actually on screen. |
 | **Size** | File size on disk. |
-| **Type** | MIME type. |
+| **Type** | MIME type — or `OpenEXR (HDR)` / `DNG (RAW preview)`, which are far more useful than the generic type browsers report for either. |
 | **Modified** | Last-modified timestamp from the file. |
-| **Error** | Only when the browser refused to decode the file. |
+| **Error** | Only when the file could not be decoded, EXR-parsed, or DNG-parsed. |
 
 Frame rate is **measured** rather than read from a header: no browser API exposes
 a file's frame rate, so the studio watches `requestVideoFrameCallback` and takes
@@ -432,18 +437,95 @@ Shortcuts stand down automatically while a slider or a text field has focus.
 
 ## Supported formats
 
-Whatever your browser can decode. In practice:
+Whatever your browser can decode, plus two formats no browser decodes at all
+that get their own hand-written support: **EXR** and **DNG**.
 
 - **Video** — `.mp4`, `.m4v`, `.mov`, `.webm`, `.ogv`, plus `.mkv`, `.avi`,
   `.mpg`, `.ts` where the browser supports the container and codec.
 - **Images** — `.png`, `.jpg`, `.webp`, `.gif`, `.avif`, `.bmp`, `.svg`, `.tif`.
+- **EXR** — decoded and tone-mapped in the browser; see below.
+- **DNG** — the embedded preview is extracted and shown; see below.
 
 Files are classified by MIME type first and by extension as a fallback, because
-exports out of an NLE frequently reach the browser with no MIME type at all.
+exports out of an NLE frequently reach the browser with no MIME type at all -
+doubly true for EXR and DNG, which browsers never assign a useful MIME type to
+in the first place.
 
 If a file is recognised but the browser cannot decode it (a ProRes `.mov`, an
 H.265 file on an unsupported build), the panel stays in place and shows a clear
-decode error rather than disappearing or breaking the session.
+decode error rather than disappearing or breaking the session. The same is
+true of an EXR using an unsupported compression, or a DNG with no embedded
+preview - see the specifics below.
+
+### HDR and log-encoded video
+
+HDR (HDR10, HLG, Dolby Vision) and log-encoded footage (S-Log, V-Log, LogC,
+C-Log, and so on) are ordinary video files as far as a browser is concerned -
+whatever codec and gamma curve is inside an `.mp4`/`.mov`/`.mkv` plays back
+exactly as encoded, with **no transform applied**. Log footage previews in its
+native flat, desaturated look; HDR tone-mapping (if any) is entirely up to the
+browser and the display, the same as it would be for any other page. This is a
+deliberate choice, not a missing feature: a comparison tool should show you
+what is actually in the file. There is no LUT or display-transform step in
+this app.
+
+### EXR
+
+[`src/lib/exr.ts`](src/lib/exr.ts) is a from-scratch OpenEXR scanline reader -
+there is no dependency-free way to get EXR decoding into a browser, so this
+implements the parts of the format spec that cover the overwhelming majority
+of real renders and plates:
+
+- **Single-part scanline images.** Not tiled, not deep/multipart data - both
+  fail immediately with a specific reason rather than a wrong or blank image.
+- **Compression: none, RLE, ZIPS, ZIP.** PIZ, PXR24, B44, B44A, DWAA and DWAB
+  are wavelet- or DCT-based and a materially larger undertaking than the
+  byte-oriented schemes here; a file using one of them fails with the specific
+  compression name in the error, not a generic parse failure.
+- **The conventional `R`/`G`/`B`/`A` channels**, or a single `Y` luminance
+  channel as a grayscale fallback. Additional AOV layers in a multi-layer EXR
+  are not read.
+
+Decoded pixels are scene-linear HDR floats - turning that into something a
+screen can show is exposure adjustment (a plain `2^stops` multiply, via the
+per-panel exposure slider that replaces the usual transport row for an EXR
+panel) followed by Reinhard tone-mapping (`x / (x + 1)`) and an sRGB transfer
+function. This is a reasonable, unsurprising default preview, not a
+colour-managed viewer or a substitute for ACES - there is no LUT support and
+no colour-space handling beyond that.
+
+The result is drawn to a `<canvas>` (there is no `<img>` involved at all for
+an EXR panel), sized and positioned by the same layout system as every other
+panel, so zoom, sync-scrubbing and edge-to-edge alignment all work identically
+to a video or an ordinary image.
+
+Every code path in the parser - all four compression schemes, both half and
+float pixel data, alpha handling, multi-chunk scanline placement, and every
+malformed-input case - is checked in `src/lib/exr.test.ts` against real EXR
+files decoded independently by ffmpeg's own OpenEXR implementation, not
+against this parser's own assumptions about what it should produce.
+
+### DNG
+
+DNG - and every RAW format built on it - stores sensor data that needs a real
+demosaic/white-balance/colour pipeline to become a picture. Reproducing that
+in a browser is a different, much larger project than a comparison tool, and
+is out of scope here. What is in scope, and genuinely useful: DNG is TIFF
+underneath, and virtually every real-world DNG already carries one or more
+embedded JPEG previews for exactly this purpose - fast display without
+touching the RAW data.
+
+[`src/lib/dng.ts`](src/lib/dng.ts) walks the TIFF IFD structure (following
+`SubIFDs` and the classic IFD chain, both of which real DNGs use) to find
+every embedded JPEG and picks the largest one. The Media Info strip for a DNG
+panel shows both that preview's own resolution (what is actually on screen)
+and the true sensor capture size where the two differ, so it stays clear that
+you are looking at a preview, not the full RAW. A DNG with no locatable
+embedded preview fails with that specific reason rather than a blank panel.
+
+No JPEG decoding happens in this file at all - once the byte range is found,
+it becomes a plain `Blob`, gets an object URL, and is handed to an ordinary
+`<img>`, the same as any other still.
 
 ---
 
@@ -451,7 +533,8 @@ decode error rather than disappearing or breaking the session.
 
 Stack: **React 18 + TypeScript + Vite**, **Zustand** for session state,
 **Vitest + Testing Library** for tests. No UI framework, no chart library, no
-runtime CSS-in-JS — the whole thing is about 60 kB gzipped.
+runtime CSS-in-JS — the whole thing, EXR/DNG decoders included, is about 66 kB
+gzipped.
 
 ### The sync engine
 
@@ -562,6 +645,15 @@ and covered by tests.
 - **Directory recursion is depth-limited** to four levels on drop.
 - **A throwing subscriber cannot break the sync loop** — listeners are isolated.
 - **Object URL creation failures** are caught per file.
+- **EXR parsing fails with a specific reason, never a wrong image**: unsupported
+  compression, tiled/deep/multi-part variants, an implausible data window
+  (capped at 20000×20000), and a truncated file are all rejected explicitly
+  rather than producing garbage pixels.
+- **DNG IFD traversal is bounded** (48 IFDs) against a corrupt or adversarial
+  file with a cyclic `SubIFDs`/next-IFD chain, and a candidate preview is only
+  ever trusted after its bytes are checked for a real JPEG start-of-image
+  marker — a corrupted offset fails cleanly instead of being handed to `<img>`
+  as if it were valid.
 
 ---
 
@@ -573,20 +665,22 @@ npm run test:watch
 npm run coverage  # v8 coverage report in ./coverage
 ```
 
-**183 tests across 12 files**, all passing. The suite is weighted towards the
+**245 tests across 15 files**, all passing. The suite is weighted towards the
 logic that is hard to eyeball:
 
 | File | Covers |
 |---|---|
 | `lib/sync.test.ts` | Registration, master selection, transport, frame stepping, all three drift-correction tiers, short-clip parking, subscriber isolation, and looping: that it restarts rather than only rewinding, survives lap after lap, and brings a short clip back with it. Uses a fake video element and a manual frame scheduler, so drift and end-of-clip scenarios are exact and instant. |
+| `lib/exr.test.ts` | The EXR decoder against **real EXR files** (in `lib/fixtures/`) covering every supported compression (none/RLE/ZIPS/ZIP) × both pixel formats (half/float), an alpha channel, and a 32-row multi-chunk gradient checked scanline by scanline for correct placement. Every expected pixel value came from ffmpeg's own independent OpenEXR decoder, not this parser's assumptions. Plus every malformed-input path (bad magic, tiled, deep, multi-part, unsupported compression) and the exposure/tone-map maths. |
+| `lib/dng.test.ts` | The DNG/TIFF preview extractor against hand-built but structurally-correct TIFF fixtures: a single embedded JPEG, two chained IFDs (must pick the larger), a DNG-shaped file with `SubIFDs` (must skip the non-JPEG raw SubIFD while still reading its size as the true sensor resolution), big-endian byte order, no-preview and truncated-file failures, and a tampered offset that must not be mistaken for a real JPEG. |
 | `lib/zoom.test.ts` | Rect clamping, marquee normalization, transform maths, gutter clamping, magnification cap, inverse round-trip, zoom composition, panning, letterbox/pillarbox content boxes — and an explicit assertion of the cross-panel synchronization invariant. |
-| `lib/guards.test.ts` | Classification by MIME and by extension, size and emptiness rejection, numeric coercion, `NaN` handling. |
+| `lib/guards.test.ts` | Classification by MIME and by extension (including EXR/DNG), size and emptiness rejection, numeric coercion, `NaN` handling, image-decoder routing. |
 | `lib/format.test.ts` | Byte scaling, clock and SMPTE timecode (including the floating-point edges that make `62.48` print `.479`), duration, aspect reduction, middle truncation. |
-| `lib/media.test.ts` | File intake, panel limit accounting, object-URL failures, frame-rate median and broadcast-rate snapping, aspect fallbacks, and the priming probe itself: that it actually plays to get real samples, restores position/mute exactly, runs at normal (not sped-up) speed, falls back cleanly when autoplay is refused, and - critically - that two clips are never primed at the same time. |
+| `lib/media.test.ts` | File intake and EXR/DNG decoder routing, panel limit accounting, object-URL failures, frame-rate median and broadcast-rate snapping, aspect fallbacks, the priming probe itself (real samples, exact restoration, normal speed, autoplay-refused fallback, never two clips at once), and the `loadExr`/`loadDngPreview` fetch-to-decode orchestration against the same real fixtures. |
 | `lib/layout.test.ts` | Auto columns, row chunking, aspect-derived weights, splitter conservation, and `fitRow`: shared height, integer edges, height- vs width-constrained rows, strip reservation, no overflow. |
 | `components/Stage.test.tsx` | The edge-to-edge guarantee against the real DOM: a 16:9 and a 1:1 panel come out 768x432 and 432x432 sharing one height, widths summing to the full row; mixed orientations keep integer edges; locked aspect gives identical boxes; short rows are height-constrained; multi-row splitting. |
 | `store/useStudio.test.ts` | Add/remove/reorder, URL revocation, metadata, zoom state, the volume/mute/solo matrix, layout state, toasts. |
-| `components/*.test.tsx` | Scrubber and volume pointer/keyboard interaction and ARIA, media info rendering for video, stills, loading and error states. |
+| `components/*.test.tsx` | Scrubber, volume and exposure pointer/keyboard interaction and ARIA; media info rendering for video, stills, EXR, DNG, loading and error states. |
 | `App.test.tsx` | Whole-shell integration: rendering panels, closing, reordering, layout, aspect and fit controls, zoom controls, rejection toasts, loop default, both coffee links, frame stepping from the footer and from panels, and every keyboard shortcut. |
 
 `src/test/setup.ts` fills the jsdom gaps — media playback, object URLs,
@@ -615,8 +709,11 @@ src/
     zoom.ts                Normalized zoom rects and transform maths
     layout.ts              Columns, rows, and the edge-to-edge row fit
     media.ts               File intake, metadata probing, fps measurement
+    exr.ts                 From-scratch OpenEXR scanline decoder + tonemap
+    dng.ts                 TIFF/DNG embedded-preview extraction
     guards.ts              Limits, classification, numeric coercion
     format.ts              Display formatters
+    fixtures/              Real EXR files + hand-built DNG/TIFF files, for tests
   store/
     useStudio.ts           Zustand session state (no playhead - see above)
   hooks/
@@ -632,6 +729,7 @@ src/
     MediaSurface.tsx       Content box, zoom transform, marquee and pan
     Scrubber.tsx           Ref-driven timeline control
     VolumeControl.tsx      Speaker + level
+    ExposureControl.tsx    EXR exposure slider, centred on zero
     MediaInfo.tsx          Metadata strip
     TransportBar.tsx       Master transport
     EmptyState.tsx         Cold start
@@ -682,6 +780,23 @@ releases both the preview and dev ports.
 **A panel shows "could not be decoded".** The browser has no decoder for that
 codec or container — ProRes, DNxHD, H.265 on some builds, or 10-bit sources.
 Transcode to H.264/MP4 or VP9/WebM.
+
+**An EXR panel shows an error naming a compression type (PIZ, PXR24, B44,
+B44A, DWAA, DWAB).** Only none/RLE/ZIPS/ZIP compression are supported — see
+[EXR](#exr). Re-export the file with one of those instead.
+
+**A DNG panel shows "no embedded JPEG preview found".** Full RAW decoding is
+out of scope — see [DNG](#dng) — and this particular file has no usable
+embedded JPEG to fall back to, which is unusual but does happen with some
+lossless-only or minimal DNG variants. There is no workaround short of
+exporting a JPEG/PNG from the RAW file yourself.
+
+**A `.braw`, `.r3d`, `.ari`, or `.mxf` file is rejected outright.** These are
+proprietary camera-RAW-video or broadcast-wrapper formats with no browser
+decoder anywhere, on any platform — unlike EXR/DNG there is no embedded
+preview convention to fall back to, so they are not in the accepted list at
+all. Export a comparison-friendly proxy (H.264/ProRes in an `.mp4`/`.mov`)
+first.
 
 **Frame rate says `probing…` for more than a couple of seconds.** It resolves
 itself automatically the moment the clip has decoded a handful of frames, even

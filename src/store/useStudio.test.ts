@@ -150,6 +150,8 @@ describe('audio', () => {
     volume: 1,
     muted: false,
     weight: null,
+    imageDecoder: null,
+    exposure: 0,
     ...over,
   })
 

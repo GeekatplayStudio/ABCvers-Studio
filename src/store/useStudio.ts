@@ -9,7 +9,7 @@
 import { create } from 'zustand'
 import type { AspectKey, FitMode, MediaItem, MediaMeta, Rect } from '../types'
 import { intakeFiles, type RejectedFile } from '../lib/media'
-import { clamp, MAX_PANELS, safeVolume } from '../lib/guards'
+import { clamp, MAX_PANELS, safeExposure, safeVolume } from '../lib/guards'
 import { clampRect, FULL_RECT, isFullRect, zoomRectBy } from '../lib/zoom'
 import { panelWeight, resizePair } from '../lib/layout'
 
@@ -58,6 +58,7 @@ export interface StudioState {
   soloItem: (id: string) => void
   setGlobalVolume: (volume: number) => void
   toggleGlobalMute: () => void
+  setExposure: (id: string, stops: number) => void
 
   setLoop: (loop: boolean) => void
   toggleInfo: () => void
@@ -230,6 +231,13 @@ export const useStudio = create<StudioState>()((set, get) => ({
   },
 
   toggleGlobalMute: () => set((state) => ({ globalMuted: !state.globalMuted })),
+
+  setExposure: (id, stops) => {
+    const value = safeExposure(stops)
+    set((state) => ({
+      items: state.items.map((item) => (item.id === id ? { ...item, exposure: value } : item)),
+    }))
+  },
 
   setLoop: (loop) => set({ loop }),
 

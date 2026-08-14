@@ -1,16 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
 import {
   __resetIdCounter,
   __resetPrimeQueue,
   aspectOf,
   createId,
   intakeFiles,
+  loadDngPreview,
+  loadExr,
   median,
   primeFps,
   probeFps,
 } from './media'
 import { MAX_PANELS } from './guards'
 import type { MediaItem } from '../types'
+
+const FIXTURES = path.join(__dirname, 'fixtures')
+function fixtureBuffer(name: string): ArrayBuffer {
+  const buf = fs.readFileSync(path.join(FIXTURES, name))
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+}
+
+/** Stub global fetch for one call, resolving with the given bytes - jsdom does not wire blob: URLs to fetch. */
+function mockFetchOnce(buffer: ArrayBuffer) {
+  return vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+    arrayBuffer: () => Promise.resolve(buffer),
+  } as Response)
+}
 
 function fakeFile(name: string, type = 'video/mp4', size = 2048): File {
   return { name, type, size, lastModified: 1_700_000_000_000 } as File
@@ -45,9 +62,25 @@ describe('intakeFiles', () => {
       volume: 1,
       muted: false,
       weight: null,
+      imageDecoder: null,
+      exposure: 0,
       url: 'blob:a.mp4',
     })
     expect(accepted[1]!.kind).toBe('image')
+    expect(accepted[1]!.imageDecoder).toBe('native')
+  })
+
+  it('routes EXR and DNG stills to their own decoders, distinct from an ordinary image', () => {
+    const { accepted, rejected } = intakeFiles(
+      [fakeFile('beauty.exr', ''), fakeFile('IMG_0142.dng', ''), fakeFile('plate.png', 'image/png')],
+      { createUrl },
+    )
+    expect(rejected).toHaveLength(0)
+    expect(accepted.map((item) => [item.name, item.kind, item.imageDecoder])).toEqual([
+      ['beauty.exr', 'image', 'exr'],
+      ['IMG_0142.dng', 'image', 'dng'],
+      ['plate.png', 'image', 'native'],
+    ])
   })
 
   it('reports unsupported files instead of throwing', () => {
@@ -115,6 +148,8 @@ describe('aspectOf', () => {
     volume: 1,
     muted: false,
     weight: null,
+    imageDecoder: null,
+    exposure: 0,
   }
 
   it('uses the intrinsic size', () => {
@@ -308,5 +343,42 @@ describe('primeFps', () => {
     await pb
 
     expect(events).toEqual(['a:play', 'a:pause', 'b:play', 'b:pause'])
+  })
+})
+
+describe('loadExr', () => {
+  it('fetches a panel URL and decodes it end to end', async () => {
+    const fetchSpy = mockFetchOnce(fixtureBuffer('solid-zip16-half.exr'))
+    const decoded = await loadExr('blob:whatever')
+    expect(fetchSpy).toHaveBeenCalledWith('blob:whatever')
+    expect(decoded.width).toBe(16)
+    expect(decoded.height).toBe(8)
+    fetchSpy.mockRestore()
+  })
+
+  it('propagates a decode failure as a rejected promise, not a swallowed error', async () => {
+    const fetchSpy = mockFetchOnce(new ArrayBuffer(4)) // too small to be a real EXR
+    await expect(loadExr('blob:bad')).rejects.toThrow(/too small/)
+    fetchSpy.mockRestore()
+  })
+})
+
+describe('loadDngPreview', () => {
+  it('fetches a panel URL, extracts the embedded preview, and returns a fresh object URL for it', async () => {
+    const fetchSpy = mockFetchOnce(fixtureBuffer('chained-ifds.dng'))
+    const createUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview-1')
+    const result = await loadDngPreview('blob:whatever')
+    expect(fetchSpy).toHaveBeenCalledWith('blob:whatever')
+    expect(result.previewUrl).toBe('blob:preview-1')
+    expect(result.previewWidth).toBe(96) // the larger of the two chained IFDs
+    expect(result.previewHeight).toBe(64)
+    fetchSpy.mockRestore()
+    createUrlSpy.mockRestore()
+  })
+
+  it('propagates a "no preview" failure as a rejected promise', async () => {
+    const fetchSpy = mockFetchOnce(fixtureBuffer('no-preview.dng'))
+    await expect(loadDngPreview('blob:bad')).rejects.toThrow(/no embedded JPEG preview/)
+    fetchSpy.mockRestore()
   })
 })

@@ -3,7 +3,7 @@
  * Everything that can reject bad input lives here so it is easy to test.
  */
 
-import type { MediaKind } from '../types'
+import type { ImageDecoder, MediaKind } from '../types'
 
 /** Beyond this the browser starts dropping frames on most machines. */
 export const MAX_PANELS = 12
@@ -46,7 +46,29 @@ export const IMAGE_EXTENSIONS = [
   'ico',
   'tif',
   'tiff',
+  'exr',
+  'dng',
 ] as const
+
+/** Extensions with no browser-native decode path, routed through lib/exr.ts or lib/dng.ts. */
+const EXR_EXTENSIONS = ['exr'] as const
+const DNG_EXTENSIONS = ['dng'] as const
+
+/** Which decode path an 'image'-kind file needs, independent of what classified it. */
+export function imageDecoderForExtension(name: string): ImageDecoder {
+  const ext = extensionOf(name)
+  if ((EXR_EXTENSIONS as readonly string[]).includes(ext)) return 'exr'
+  if ((DNG_EXTENSIONS as readonly string[]).includes(ext)) return 'dng'
+  return 'native'
+}
+
+export const MIN_EXPOSURE_STOPS = -8
+export const MAX_EXPOSURE_STOPS = 8
+
+/** Coerce any input into a usable exposure adjustment, in stops. */
+export function safeExposure(value: number): number {
+  return clamp(Number.isFinite(value) ? value : 0, MIN_EXPOSURE_STOPS, MAX_EXPOSURE_STOPS)
+}
 
 export const ACCEPT_ATTRIBUTE = [
   'video/*',

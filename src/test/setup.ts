@@ -37,6 +37,23 @@ if (typeof window !== 'undefined') {
     } as unknown as typeof ResizeObserver
   }
 
+  /* jsdom has no canvas/ImageData implementation at all - real browsers do.
+     A plain data container is enough for code that only builds and reads one. */
+  if (typeof window.ImageData === 'undefined') {
+    class ImageDataPolyfill {
+      readonly data: Uint8ClampedArray
+      readonly width: number
+      readonly height: number
+      constructor(data: Uint8ClampedArray, width: number, height?: number) {
+        this.data = data
+        this.width = width
+        this.height = height ?? data.length / 4 / width
+      }
+    }
+    window.ImageData = ImageDataPolyfill as unknown as typeof ImageData
+    globalThis.ImageData = window.ImageData
+  }
+
   /* jsdom ships no PointerEvent at all, so fireEvent.pointerDown would silently
      drop clientX/clientY and every drag test would read position 0. A MouseEvent
      subclass is enough for the properties the app actually uses. */

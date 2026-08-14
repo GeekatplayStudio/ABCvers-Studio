@@ -2,9 +2,11 @@
  * Turning dropped files into MediaItems, and probing them for metadata.
  */
 
-import { classifyFile, safeFps, MAX_PANELS } from './guards'
+import { classifyFile, imageDecoderForExtension, safeFps, MAX_PANELS } from './guards'
 import type { MediaItem, MediaMeta } from '../types'
 import { DEFAULT_FPS } from './sync'
+import { decodeExr, type DecodedExr } from './exr'
+import { findDngPreview } from './dng'
 
 let counter = 0
 
@@ -75,6 +77,8 @@ export function intakeFiles(files: readonly File[], options: IntakeOptions = {})
       volume: 1,
       muted: false,
       weight: null,
+      imageDecoder: verdict.kind === 'image' ? imageDecoderForExtension(file.name) : null,
+      exposure: 0,
     })
   }
 
@@ -314,4 +318,44 @@ export function aspectOf(item: MediaItem, fallback = 16 / 9): number {
   const meta = item.meta
   if (!meta || !meta.width || !meta.height) return fallback
   return meta.width / meta.height
+}
+
+/** Read a MediaItem's own object URL back into bytes, for the decoders below. */
+async function readObjectUrl(url: string): Promise<ArrayBuffer> {
+  const response = await fetch(url)
+  return response.arrayBuffer()
+}
+
+/** Fetches and decodes an EXR panel's source file. See lib/exr.ts for the format support this covers. */
+export async function loadExr(url: string): Promise<DecodedExr> {
+  return decodeExr(await readObjectUrl(url))
+}
+
+export interface DngPreviewResult {
+  /** Object URL for a real, browser-decodable JPEG extracted from the DNG - never the raw file itself. */
+  previewUrl: string
+  previewWidth: number
+  previewHeight: number
+  sensorWidth: number
+  sensorHeight: number
+}
+
+/**
+ * Fetches a DNG, locates its largest embedded JPEG preview, and returns a
+ * fresh object URL pointing at just that JPEG - see lib/dng.ts. The caller
+ * owns the returned URL and must revoke it once done (on unmount, or before
+ * requesting a new one for the same panel).
+ */
+export async function loadDngPreview(url: string): Promise<DngPreviewResult> {
+  const buffer = await readObjectUrl(url)
+  const preview = findDngPreview(buffer)
+  const jpegBytes = new Uint8Array(buffer, preview.previewOffset, preview.previewLength)
+  const previewUrl = URL.createObjectURL(new Blob([jpegBytes], { type: 'image/jpeg' }))
+  return {
+    previewUrl,
+    previewWidth: preview.previewWidth,
+    previewHeight: preview.previewHeight,
+    sensorWidth: preview.sensorWidth,
+    sensorHeight: preview.sensorHeight,
+  }
 }

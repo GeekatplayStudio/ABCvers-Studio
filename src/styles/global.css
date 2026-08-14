@@ -736,6 +736,89 @@ button {
   pointer-events: none;
 }
 
+/* -------------------------------------------------------------- exposure -- */
+
+.exposure {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.exposure__track {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 40px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.exposure__track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: #23272e;
+}
+
+/* A tick at zero - the one position on this slider that means "untouched". */
+.exposure__zero {
+  position: absolute;
+  left: var(--zero);
+  top: 2px;
+  bottom: 2px;
+  width: 1px;
+  background: var(--text-faint);
+  pointer-events: none;
+}
+
+.exposure__fill {
+  position: absolute;
+  left: var(--bar-start);
+  width: calc(var(--bar-end) - var(--bar-start));
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text-dim);
+  pointer-events: none;
+}
+
+.exposure__track:hover .exposure__fill {
+  background: var(--accent);
+}
+
+.exposure__knob {
+  position: absolute;
+  left: var(--knob);
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.exposure--compact .exposure__knob {
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+}
+
+.exposure__value {
+  flex: none;
+  min-width: 4.5em;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
 /* ------------------------------------------------------------ media info -- */
 
 .meta {
