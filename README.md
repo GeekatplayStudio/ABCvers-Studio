@@ -1,7 +1,17 @@
-# ABCvers Studio
+<div align="center">
+
+![ABCvers Studio](docs/images/banner.png)
 
 **Side-by-side comparison for video and images.**
 By **Geekatplay Studio** — *Vladimir Chopine*.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-e8813a.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-175%20passing-2e9e5b.svg)](#testing)
+[![Built with React](https://img.shields.io/badge/react-18-1e2126.svg?logo=react)](https://react.dev)
+[![Built with Vite](https://img.shields.io/badge/vite-6-1e2126.svg?logo=vite)](https://vitejs.dev)
+[![TypeScript](https://img.shields.io/badge/typescript-strict-1e2126.svg?logo=typescript)](tsconfig.json)
+
+</div>
 
 ABCvers Studio puts up to twelve clips or stills next to each other with no gaps
 between them, and drives all of them from a single set of controls: one play
@@ -12,11 +22,14 @@ moment, in the same place, at the same size.
 
 Everything runs locally in your browser. **No file is ever uploaded anywhere.**
 
+![Three synchronized panels, mixed 16:9 / 9:16 / 1:1 sources, edge to edge](docs/images/screenshot-panels.png)
+
 ---
 
 ## Contents
 
 - [Highlights](#highlights)
+- [Screenshots](#screenshots)
 - [Getting started](#getting-started)
 - [Using the studio](#using-the-studio)
   - [Adding media](#adding-media)
@@ -58,6 +71,55 @@ Everything runs locally in your browser. **No file is ever uploaded anywhere.**
 | **Drag and drop** | Drop files or whole folders anywhere on the window, or use the file picker. |
 | **Dark, minimal UI** | Near-black chrome so the footage is the only saturated thing on screen. |
 | **Fully local** | Object URLs only. Nothing leaves the machine. |
+
+---
+
+## Screenshots
+
+All captured from the running app — three synthetic test clips at mixed
+resolutions and orientations (16:9, 9:16, 1:1), so the geometry and the
+frame-rate readouts on screen are real, not mocked up.
+
+<table>
+<tr>
+<td width="50%">
+
+**Cold start**
+<br>Drop files anywhere, or browse. Nothing loaded, nothing uploaded.
+
+![Empty state](docs/images/screenshot-empty-state.png)
+
+</td>
+<td width="50%">
+
+**Playing, in sync**
+<br>Three different sources, three different frame rates (30 fps, 30 fps,
+25 fps — each measured, not assumed), one shared timecode.
+
+![Synchronized playback across mixed sources](docs/images/screenshot-playback.png)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Synchronized zoom**
+<br>One marquee, drawn once, on one panel — magnified identically in all
+three at once. This is the feature the tool is built around.
+
+![The same detail zoomed in every panel at once](docs/images/screenshot-zoom.png)
+
+</td>
+<td width="50%">
+
+**Everything is a shortcut**
+<br>Full keyboard reference, always one `?` away.
+
+![Keyboard shortcuts reference](docs/images/screenshot-shortcuts.png)
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -520,6 +582,8 @@ jsdom silently drops `clientX` and every drag test reads position zero).
 ## Project layout
 
 ```
+docs/
+  images/                 Banner, screenshots, social preview, icon
 scripts/
   common.sh              Node check, port probing, server state
   install.sh             Dependency install
@@ -644,3 +708,8 @@ Concept and direction: **Vladimir Chopine**.
 GitHub Repository: [github.com/GeekatplayStudio/ABCvers-Studio](https://github.com/GeekatplayStudio/ABCvers-Studio)
 
 Released under the MIT Licence.
+
+<sub>The link-preview card GitHub shows for this repo is set from
+`docs/images/social-preview.png` via **Settings → General → Social preview** —
+that's an upload done through the GitHub UI, not a file GitHub picks up on its
+own.</sub>
