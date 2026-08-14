@@ -1,0 +1,15 @@
+create system that allouw ot compare side per site multiple videos or images.
+Sistem need be dynamic. Allow to select 1-2-3-4-5-6 or more screens side per side, next to eachother in main panel
+No borders between them, Screens need change aspect rate automaticly depend on the imported media size, or locket to specific format if user selected, example "FRee" or "16x9, 9x16, 1x1 ...eachother
+Videos shoudl have scrabers under each and syncronized scraber that allow to move from one frame to another from all of them, as well synchronized play and stop. 
+Each player need have mute and valume control and global mute anf valume, that effect and apply to each screen.
+We also need have zoom and reset to original option, if select zoom, user can draw marque aroun area, that area will be magnyfied to fill the player window, this muyst  be synchronized with all other videoplayers or images.
+User can delete video from the player, closing player or add new at any time.
+Ui must be design in darker tones, very modern, slim and minimalistic aproouch. 
+Code must have tests and guarrails.
+Under each video or image need have info aoubt that media, name size, meta data ...etc. All well formated for the Ui
+System must be very optimized for best smnooth playing.
+All need to be branded as Geekatplay Studio Vladimir Chopine
+Create readme to provide detail informatio nabotu this application.
+Adding videos or images can be from simple drag and drop in the place or with file navigator.
+It is important synchronization between players, zoom to specifi area from all players and ability to resize view windoew.

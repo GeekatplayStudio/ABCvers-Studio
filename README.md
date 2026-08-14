@@ -1,1 +1,656 @@
-# ABCvers-Studio
+# ABCvers Studio
+
+**Side-by-side comparison for video and images.**
+By **Geekatplay Studio** — *Vladimir Chopine*.
+
+ABCvers Studio puts up to twelve clips or stills next to each other with no gaps
+between them, and drives all of them from a single set of controls: one play
+button, one scrubber, one volume, one zoom. Press play and every panel starts on
+the same frame. Draw a marquee on any panel and every panel magnifies the same
+region. That is the whole point of the tool — you are always comparing the same
+moment, in the same place, at the same size.
+
+Everything runs locally in your browser. **No file is ever uploaded anywhere.**
+
+---
+
+## Contents
+
+- [Highlights](#highlights)
+- [Getting started](#getting-started)
+- [Using the studio](#using-the-studio)
+  - [Adding media](#adding-media)
+  - [Layout and aspect ratio](#layout-and-aspect-ratio)
+  - [Resizing panels](#resizing-panels)
+  - [Synchronized playback](#synchronized-playback)
+  - [Audio](#audio)
+  - [Synchronized zoom](#synchronized-zoom)
+  - [Media info](#media-info)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Supported formats](#supported-formats)
+- [How it works](#how-it-works)
+  - [The sync engine](#the-sync-engine)
+  - [Synchronized zoom geometry](#synchronized-zoom-geometry)
+  - [Layout maths](#layout-maths)
+  - [Performance](#performance)
+- [Guardrails](#guardrails)
+- [Testing](#testing)
+- [Project layout](#project-layout)
+- [Scripts](#scripts)
+- [Troubleshooting](#troubleshooting)
+- [Support the work](#support-the-work)
+- [Credits and licence](#credits-and-licence)
+
+---
+
+## Highlights
+
+| | |
+|---|---|
+| **1–12 panels** | Any mix of videos and stills, side by side, pictures meeting edge to edge with nothing between them. |
+| **Frame-accurate sync** | One transport drives every clip. Drift is corrected continuously. Loops by default. |
+| **Frame by frame, either way** | Single and ten-frame jogs from the footer, from any panel, or from the keyboard. |
+| **Synchronized zoom** | Marquee a detail in one panel; every panel magnifies the same region. |
+| **Free or locked aspect** | Panels follow each source's own ratio, or lock all of them to 16:9, 9:16, 1:1, 4:3, 3:4, 21:9, 2.39:1 — with Fit or Fill. |
+| **Resizable panels** | Drag the divider between any two panels to trade width. |
+| **Per-panel + global audio** | Independent volume and mute per screen, multiplied by a master volume. Alt-click to solo. |
+| **Full metadata** | Name, resolution, aspect, duration, frame rate, frame count, size, MIME type, modified date. |
+| **Drag and drop** | Drop files or whole folders anywhere on the window, or use the file picker. |
+| **Dark, minimal UI** | Near-black chrome so the footage is the only saturated thing on screen. |
+| **Fully local** | Object URLs only. Nothing leaves the machine. |
+
+---
+
+## Getting started
+
+Requirements: **Node.js 18+** (built and verified on Node 22) and a modern
+Chromium, Edge, Safari or Firefox build.
+
+### Quick Start
+
+```bash
+git clone https://github.com/GeekatplayStudio/ABCvers-Studio.git
+cd ABCvers-Studio
+```
+
+### The three scripts
+
+On Windows, double-click them or run them from a terminal — no PowerShell policy
+change needed, the wrappers handle it:
+
+```
+install.cmd     install dependencies
+start.cmd       build, serve, and open the studio
+stop.cmd        shut the server down
+```
+
+On macOS and Linux:
+
+```bash
+./scripts/install.sh
+./scripts/start.sh
+./scripts/stop.sh
+```
+
+Or from npm, on any platform (the dispatcher picks the right script for you):
+
+```bash
+npm run app:install
+npm run app:start
+npm run app:stop
+```
+
+That is the whole workflow: **install once, then start and stop.**
+
+### What each one does
+
+**install** checks that Node is present and recent enough, then installs from
+`package-lock.json` with `npm ci` for a reproducible tree.
+
+| Option | |
+|---|---|
+| `-Update` / `--update` | Use `npm install` instead, letting the lockfile change |
+| `-Verify` / `--verify` | Also typecheck, lint and run the full test suite |
+
+**start** installs dependencies if they are missing, runs the production build
+(**which typechecks first — a type error stops the start, it does not ship**),
+then launches the server detached and waits until it is genuinely accepting
+connections before telling you the URL. It records the process id and port in
+`.abcvers/server.json` so `stop` can shut down exactly that server. Default port
+**4173**.
+
+| Option | |
+|---|---|
+| `-Port 8080` / `--port 8080` | Listen somewhere else |
+| `-Dev` / `--dev` | Skip the build, run the hot-reloading dev server (port 5173) |
+| `-SkipBuild` / `--skip-build` | Serve the existing `dist/` without rebuilding |
+| `-Force` / `--force` | Stop a running instance and start fresh |
+| `-NoOpen` / `--no-open` | Do not open a browser |
+
+Start refuses to do damage: if an instance is already running it says so and
+opens that one rather than starting a second, and if the port is taken it names
+the process holding it instead of failing halfway through a build.
+
+**stop** shuts down the recorded process. If that record is missing or stale —
+machine rebooted, file deleted — it falls back to whatever is listening on the
+port, and **only ever stops a `node` process**, never something unrelated that
+happens to have taken the port.
+
+| Option | |
+|---|---|
+| `-Port 8080` / `--port 8080` | Also release another port |
+| `-All` / `--all` | Also release the dev port |
+
+Server output goes to `.abcvers/server.log`; the whole `.abcvers/` directory is
+scratch state and is git-ignored.
+
+### Working on the code directly
+
+```bash
+npm run dev      # hot-reloading dev server at http://localhost:5173
+npm run build    # typecheck, then bundle to ./dist
+npm run serve    # serve ./dist on 4173
+npm run verify   # typecheck + lint + tests
+```
+
+---
+
+## Using the studio
+
+### Adding media
+
+Three ways, all equivalent:
+
+1. **Drag and drop** files onto the window — anywhere, at any time, including
+   while clips are already playing. Whole folders work too: the drop handler
+   walks directory entries up to four levels deep.
+2. **Add media** in the toolbar opens the file navigator (multi-select).
+3. **Choose files** on the empty-state card, for a cold start.
+
+New panels are appended to the right. A clip that joins while the others are
+playing is dropped onto the current playhead and starts playing immediately, so
+it is in sync from its first frame.
+
+Close a panel with the **✕** in its top-right corner (visible on hover), or wipe
+the session with **Clear**. Reorder panels with the **‹** and **›** buttons.
+
+### Layout and aspect ratio
+
+**Screens** picks how many panels sit in a row: `Auto`, or 1–6. `Auto` keeps up
+to four panels on one row and wraps larger sets into a grid, always choosing the
+arrangement that leaves each panel biggest.
+
+**Aspect** controls the shape of every panel:
+
+- **Free** — each panel takes exactly the aspect ratio of its own media.
+- **16:9 / 9:16 / 1:1 / 4:3 / 3:4 / 21:9 / 2.39:1** — every panel is forced to
+  the same frame shape, without distorting the picture. This is the mode for
+  judging framing across differently shot sources.
+
+**Fit / Fill** decides what happens when a panel is *not* the same shape as the
+picture inside it — which only occurs under an aspect lock, or after you have
+dragged a splitter:
+
+- **Fit** shows the whole frame, letterboxing inside the panel. The default.
+- **Fill** crops the picture so it reaches every edge of the panel, leaving no
+  bars anywhere.
+
+Switching aspect resets any widths you dragged by hand.
+
+#### Pictures always meet edge to edge
+
+Panels are not simply given equal or proportional widths — that would leave
+black letterbox bars between neighbouring pictures. Instead, every panel in a row
+is given the **same picture height**, and a width of `height x aspect ratio`, so
+each panel's box is exactly the shape of the picture in it. A 16:9 clip beside a
+1:1 clip in a 1200 px row comes out at 768x432 and 432x432: both full bleed,
+sharing one top and bottom edge, meeting on a single shared vertical edge with
+**nothing at all between them**.
+
+The row's height is whichever is smaller: the height available, or the height
+that makes the row exactly fill the width. Leftover space therefore ends up
+*outside* the row — never between the panels. Panel widths are emitted as
+integers derived from cumulative positions, so adjacent edges land on the same
+whole pixel and no sub-pixel seam can show the background through.
+
+### Resizing panels
+
+Hover the seam between two panels — the cursor becomes a resize handle and a thin
+accent line appears. Drag to trade width between those two panels; the rest of the
+row never moves, because the pair's combined width is conserved. A panel can never
+be collapsed below 8% of the pair.
+
+A dragged panel is no longer its picture's own shape, so bars appear inside it —
+switch to **Fill** to crop instead, or change the aspect to snap every panel back
+to the automatic edge-to-edge widths.
+
+The divider is also keyboard reachable: tab to it, then **←/→** (hold **Shift**
+for larger steps).
+
+### Synchronized playback
+
+The footer is the master transport:
+
+- **Play / pause** starts and stops every video at once.
+- **Frame step** (◀▌ ▐▶) moves one frame in either direction on the master
+  clip's grid. The outer double arrows jog **ten** frames at a time.
+- **Stop** pauses and rewinds to the start.
+- **Loop** restarts the timeline at the end instead of stopping. **On by
+  default** — comparison work means watching the same few seconds over and over.
+- **Speed** — 0.25x, 0.5x, 1x, 1.5x, 2x, applied to every clip together.
+- **Master scrubber** seeks all panels. Dragging it pauses playback and resumes
+  on release, so you never fight the playhead.
+- **Timecode** shows `HH:MM:SS:FF` on the master clip's frame rate, with the
+  total duration beneath it.
+
+Each panel also has its **own frame-step buttons and compact scrubber**. They are
+not an independent playhead — they show the shared position and move the whole
+group, so you can jog frame by frame from whichever panel you happen to be
+studying without reaching back down to the footer.
+
+#### Moving frame by frame
+
+Six ways, all of them bidirectional and all of them moving every panel together:
+
+| Control | Movement |
+|---|---|
+| Footer ◀▌ / ▐▶ | One frame back / forward |
+| Footer ◀◀ / ▶▶ | Ten frames back / forward |
+| Panel ◀▌ / ▐▶ | One frame, from any panel |
+| `←` / `→` | One frame back / forward |
+| `,` / `.` | One frame back / forward (NLE convention) |
+| `<` / `>` | Ten frames back / forward |
+
+Stepping pauses playback first, then snaps onto the frame grid of the master
+clip — landing at `(n + 0.5) / fps`, mid-frame, which is what browsers decode
+reliably. Landing on a frame boundary gives you the neighbouring frame about
+half the time.
+
+The timeline length is the **longest** clip. Shorter clips park on their last
+frame rather than looping or restarting, so the comparison stays honest.
+
+### Audio
+
+- Every panel has a speaker button and a volume slider.
+- The footer has a **global** speaker and volume.
+- What you hear from a panel is `panel volume x global volume`, and either mute
+  silences it.
+- **Alt-click a panel's speaker to solo it** — every other panel mutes. Alt-click
+  again to bring them all back.
+
+The studio starts **globally muted** on purpose: browsers block audible autoplay,
+and twelve soundtracks at once is rarely what you want.
+
+### Synchronized zoom
+
+This is the feature the tool is built around.
+
+1. Click **Zoom** in the toolbar (or press **Z**). The cursor becomes a crosshair.
+2. **Drag a marquee** around the detail you care about, on any panel.
+3. On release, that region is magnified to fill the frame — **in every panel at
+   once**.
+
+While zoomed (and out of marquee mode) the cursor is a hand: **drag to pan**, and
+all panels pan together. **Ctrl/⌘ + scroll wheel** zooms around the pointer.
+**Reset** (or **R**) returns to the original framing. The toolbar shows the live
+magnification factor.
+
+Zoom composes: drawing a second marquee while already zoomed magnifies further
+into what you are currently looking at, and the maths accounts for the current
+transform, so it lands exactly where you drew it.
+
+Because the zoom region is stored in normalized picture coordinates rather than
+pixels, it means "the same part of the image" regardless of each source's
+resolution or each panel's on-screen size. A 4K master and a 720p proxy magnify
+the identical region.
+
+### Media info
+
+Under each panel (toggle with **I**, or the info button):
+
+| Field | Notes |
+|---|---|
+| **Name** | Middle-truncated so the extension stays visible; full name on hover. |
+| **Resolution** | Intrinsic decoded pixels, e.g. `3840 x 2160`. |
+| **Aspect** | Reduced ratio (`16:9`), or a decimal form for odd sizes (`1.78:1`). |
+| **Duration** | Videos only. |
+| **Frame rate** | Measured, not guessed — see below. Shows `probing…` until measured. |
+| **Frames** | Total frame count, from duration x frame rate. |
+| **Pixels** | Stills only — megapixels. |
+| **Size** | File size on disk. |
+| **Type** | MIME type. |
+| **Modified** | Last-modified timestamp from the file. |
+| **Error** | Only when the browser refused to decode the file. |
+
+Frame rate is **measured** rather than read from a header: no browser API exposes
+a file's frame rate, so the studio watches `requestVideoFrameCallback` and takes
+the median gap between presented frames, then snaps the result onto the nearest
+standard broadcast rate (23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, …). Medians
+shrug off dropped frames. Browsers without that API (Firefox) fall back to 30 fps,
+which only affects frame stepping and the frame counter.
+
+---
+
+## Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `Space` / `K` | Play / pause every panel |
+| `←` / `→` | Step one frame back / forward |
+| `,` / `.` | Step one frame back / forward |
+| `<` / `>` | Jog ten frames back / forward |
+| `Shift + ←` / `→` | Jump one second |
+| `Home` / `End` | Go to start / end |
+| `L` | Loop (on by default) |
+| `Z` | Zoom marquee mode |
+| `Esc` | Leave marquee mode |
+| `R` | Reset zoom |
+| `+` / `-` | Zoom in / out |
+| `Ctrl/⌘ + wheel` | Zoom around the cursor |
+| Drag (while zoomed) | Pan all panels together |
+| `M` | Global mute |
+| `Alt + click` speaker | Solo that panel |
+| `I` | Toggle info strips |
+| `N` | Toggle name overlays |
+| `F` | Fullscreen |
+| `1` … `6` | Screens per row |
+| `0` | Auto layout |
+| `?` | Shortcut reference |
+
+Shortcuts stand down automatically while a slider or a text field has focus.
+
+---
+
+## Supported formats
+
+Whatever your browser can decode. In practice:
+
+- **Video** — `.mp4`, `.m4v`, `.mov`, `.webm`, `.ogv`, plus `.mkv`, `.avi`,
+  `.mpg`, `.ts` where the browser supports the container and codec.
+- **Images** — `.png`, `.jpg`, `.webp`, `.gif`, `.avif`, `.bmp`, `.svg`, `.tif`.
+
+Files are classified by MIME type first and by extension as a fallback, because
+exports out of an NLE frequently reach the browser with no MIME type at all.
+
+If a file is recognised but the browser cannot decode it (a ProRes `.mov`, an
+H.265 file on an unsupported build), the panel stays in place and shows a clear
+decode error rather than disappearing or breaking the session.
+
+---
+
+## How it works
+
+Stack: **React 18 + TypeScript + Vite**, **Zustand** for session state,
+**Vitest + Testing Library** for tests. No UI framework, no chart library, no
+runtime CSS-in-JS — the whole thing is about 60 kB gzipped.
+
+### The sync engine
+
+[`src/lib/sync.ts`](src/lib/sync.ts) is a standalone class that knows nothing
+about React.
+
+- **One master.** The longest ready clip owns the clock. Everything else is a
+  follower, so the shortest clip cannot drag the group back.
+- **One animation frame loop** drives correction and publishes the playhead.
+- **Two-tier drift correction.** Under 12 ms of drift: do nothing (correcting is
+  more disruptive than the error). Between 12 ms and 250 ms: trim the follower's
+  `playbackRate` by ±6% until it catches up — inaudible and with no visual hitch.
+  Beyond 250 ms: a hard seek. Naive implementations hard-seek constantly, which
+  is exactly why they stutter.
+- **Followers that are seeking or still buffering are left alone**, so the engine
+  never fights the decoder.
+- **Frame stepping** snaps onto frame centres (`(n + 0.5) / fps`), which is what
+  browsers decode reliably; landing on a boundary gives you the wrong frame about
+  half the time.
+- Clips that join late are dropped onto the current playhead and started if the
+  session is playing.
+- **Looping restarts, it does not merely rewind.** A clip that reaches its end is
+  paused by the browser, and drift correction deliberately never touches the
+  master — so the loop explicitly re-issues `play()` on every element after
+  rewinding. Seeking alone would leave the timeline sitting at zero.
+
+The class takes its scheduler as a constructor argument, so tests advance frames
+by hand instead of waiting on real time.
+
+### Synchronized zoom geometry
+
+[`src/lib/zoom.ts`](src/lib/zoom.ts) keeps a single normalized rectangle
+(`x, y, w, h`, all 0–1) for the whole session, relative to each panel's **content
+box** — the area the picture really occupies after letterboxing.
+
+- `rectToTransform` turns it into a CSS transform that centres the selection and
+  magnifies it as far as it can while keeping the **whole** selection visible, so
+  you never lose part of what you deliberately drew. Translation is clamped so
+  empty gutters can never appear at the edges.
+- `viewToContent` is the exact inverse, which is what lets a marquee drawn while
+  already zoomed compose correctly with the existing zoom.
+- Everything is applied as a single `translate3d(...) scale(...)` on a wrapper
+  element, so magnification is a GPU compositor operation — no re-decode, no
+  re-layout, no canvas.
+
+The synchronization property is a direct consequence of normalizing to content
+rather than pixels, and it is asserted in the test suite: the same rect produces
+the same relative framing in panels of different sizes.
+
+### Layout maths
+
+[`src/lib/layout.ts`](src/lib/layout.ts). `fitRow` is a pure function: given the
+panel weights (each one a width-per-unit-height — the media ratio in free mode,
+the locked ratio otherwise, or a splitter override), the row's box and the height
+its info strips need, it returns one shared picture height plus integer widths.
+
+```
+H = min(availableHeight, rowWidth / Σ weights)
+width_i = H × weight_i          (rounded off cumulative positions)
+```
+
+Because H is shared and each width is `H × ratio`, every box is exactly its
+picture's shape. That is the whole mechanism behind edge-to-edge alignment, and
+it is asserted both as arithmetic (`layout.test.ts`) and against the real DOM
+geometry the components emit (`Stage.test.tsx`).
+
+Info strips are measured with a `ResizeObserver` rather than assumed, because a
+narrow panel wraps its metadata onto more lines; the row reserves the tallest
+strip so one panel cannot push the pictures out of alignment. A splitter drag
+conserves the dragged pair's total weight, so the rest of the row never jumps.
+
+### Performance
+
+The tool has to stay smooth with a dozen decoders running, so:
+
+- **The playhead never enters React state.** Components subscribe to the sync
+  engine and write CSS custom properties and `textContent` onto refs. Scrubbing a
+  60 fps timeline triggers zero re-renders.
+- **Zoom is a compositor transform**, not a redraw.
+- **Panels are memoized**, and store reads are per-field selectors so a volume
+  change in panel 3 does not re-render panels 1, 2 and 4.
+- **ResizeObserver callbacks are coalesced into an animation frame**, with a
+  sub-pixel threshold, so a splitter drag cannot storm the renderer.
+- **Object URLs are revoked** the moment a panel closes.
+- Audio is muted at the element level when the effective volume is 0, letting the
+  browser skip audio decoding entirely.
+
+---
+
+## Guardrails
+
+Defensive behaviour is concentrated in [`src/lib/guards.ts`](src/lib/guards.ts)
+and covered by tests.
+
+- **Hard panel limit** of 12; extra files are refused with a readable reason
+  instead of grinding the machine to a halt.
+- **File size ceiling** of 8 GB, and empty files are rejected.
+- **Unsupported files never throw.** `intakeFiles` always returns
+  `{ accepted, rejected }`, and rejections surface as a toast.
+- **Every numeric input is coerced**: volumes clamp to 0–1, times clamp to the
+  clip duration, frame rates outside 1–480 are discarded as probe artefacts, and
+  `NaN` is handled everywhere rather than propagating into the DOM.
+- **Zoom rects are clamped** to the unit square with a minimum size, and
+  magnification is capped at 40x.
+- **Marquee drags under 10 px are ignored**, so a click never zooms by accident.
+- **A React error boundary** wraps both the app and the panel stage, so one bad
+  file cannot take down the session.
+- **Directory recursion is depth-limited** to four levels on drop.
+- **A throwing subscriber cannot break the sync loop** — listeners are isolated.
+- **Object URL creation failures** are caught per file.
+
+---
+
+## Testing
+
+```bash
+npm test          # single run
+npm run test:watch
+npm run coverage  # v8 coverage report in ./coverage
+```
+
+**175 tests across 12 files**, all passing. The suite is weighted towards the
+logic that is hard to eyeball:
+
+| File | Covers |
+|---|---|
+| `lib/sync.test.ts` | Registration, master selection, transport, frame stepping, all three drift-correction tiers, short-clip parking, subscriber isolation, and looping: that it restarts rather than only rewinding, survives lap after lap, and brings a short clip back with it. Uses a fake video element and a manual frame scheduler, so drift and end-of-clip scenarios are exact and instant. |
+| `lib/zoom.test.ts` | Rect clamping, marquee normalization, transform maths, gutter clamping, magnification cap, inverse round-trip, zoom composition, panning, letterbox/pillarbox content boxes — and an explicit assertion of the cross-panel synchronization invariant. |
+| `lib/guards.test.ts` | Classification by MIME and by extension, size and emptiness rejection, numeric coercion, `NaN` handling. |
+| `lib/format.test.ts` | Byte scaling, clock and SMPTE timecode (including the floating-point edges that make `62.48` print `.479`), duration, aspect reduction, middle truncation. |
+| `lib/media.test.ts` | File intake, panel limit accounting, object-URL failures, frame-rate median and broadcast-rate snapping, aspect fallbacks. |
+| `lib/layout.test.ts` | Auto columns, row chunking, aspect-derived weights, splitter conservation, and `fitRow`: shared height, integer edges, height- vs width-constrained rows, strip reservation, no overflow. |
+| `components/Stage.test.tsx` | The edge-to-edge guarantee against the real DOM: a 16:9 and a 1:1 panel come out 768x432 and 432x432 sharing one height, widths summing to the full row; mixed orientations keep integer edges; locked aspect gives identical boxes; short rows are height-constrained; multi-row splitting. |
+| `store/useStudio.test.ts` | Add/remove/reorder, URL revocation, metadata, zoom state, the volume/mute/solo matrix, layout state, toasts. |
+| `components/*.test.tsx` | Scrubber and volume pointer/keyboard interaction and ARIA, media info rendering for video, stills, loading and error states. |
+| `App.test.tsx` | Whole-shell integration: rendering panels, closing, reordering, layout, aspect and fit controls, zoom controls, rejection toasts, loop default, both coffee links, frame stepping from the footer and from panels, and every keyboard shortcut. |
+
+`src/test/setup.ts` fills the jsdom gaps — media playback, object URLs,
+`ResizeObserver`, pointer capture, and a `PointerEvent` polyfill (without which
+jsdom silently drops `clientX` and every drag test reads position zero).
+
+---
+
+## Project layout
+
+```
+install.cmd start.cmd stop.cmd   Windows entry points
+scripts/
+  common.ps1 / common.sh         Node check, port probing, server state
+  install.ps1 / install.sh       Dependency install
+  start.ps1  / start.sh          Build + serve, detached, with a health wait
+  stop.ps1   / stop.sh           Shut down by recorded pid, port as fallback
+  run.mjs                        npm run app:* -> the right script per platform
+src/
+  types.ts                 Shared domain types
+  main.tsx                 Entry point
+  App.tsx                  Shell: toolbar, stage, transport, overlays
+  lib/
+    sync.ts                SyncEngine - one timeline for every clip
+    zoom.ts                Normalized zoom rects and transform maths
+    layout.ts              Columns, rows, and the edge-to-edge row fit
+    media.ts               File intake, metadata probing, fps measurement
+    guards.ts              Limits, classification, numeric coercion
+    format.ts              Display formatters
+  store/
+    useStudio.ts           Zustand session state (no playhead - see above)
+  hooks/
+    useElementSize.ts      Coalesced ResizeObserver
+    useMaxHeight.ts        Tallest info strip in a row
+    useDropTarget.ts       Window-wide drag and drop, folders included
+    useShortcuts.ts        Keyboard map
+    useSyncTime.ts         Render-free playhead subscription
+  components/
+    Toolbar.tsx            Media, aspect, fit, columns, zoom, view
+    Stage.tsx              Rows, justified panel geometry, splitters
+    MediaPanel.tsx         One screen: media, tools, scrubber, volume, info
+    MediaSurface.tsx       Content box, zoom transform, marquee and pan
+    Scrubber.tsx           Ref-driven timeline control
+    VolumeControl.tsx      Speaker + level
+    MediaInfo.tsx          Metadata strip
+    TransportBar.tsx       Master transport
+    EmptyState.tsx         Cold start
+    CoffeeLink.tsx         Support link, shown top and bottom
+    ShortcutsDialog.tsx    Keyboard reference
+    Toasts.tsx             Non-blocking notices
+    ErrorBoundary.tsx      Last-resort guardrail
+    Icons.tsx              Slim SVG icon set
+  styles/global.css        Design tokens and all component styling
+  test/setup.ts            jsdom shims
+```
+
+---
+
+## Scripts
+
+| Script | Purpose |
+|---|---|
+| `install.cmd` / `scripts/install.sh` / `npm run app:install` | Install dependencies |
+| `start.cmd` / `scripts/start.sh` / `npm run app:start` | Build and serve, detached |
+| `stop.cmd` / `scripts/stop.sh` / `npm run app:stop` | Stop the server |
+| `npm run dev` | Dev server with hot reload |
+| `npm run build` | Typecheck, then bundle to `./dist` |
+| `npm run preview` | Serve the built bundle |
+| `npm run serve` | Serve `./dist` on port 4173 |
+| `npm test` | Run all tests once |
+| `npm run test:watch` | Tests in watch mode |
+| `npm run coverage` | Coverage report |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm run verify` | Typecheck + lint + tests |
+
+---
+
+## Troubleshooting
+
+**`start` says the port is already in use.** Something else has 4173. Run
+`stop.cmd`, or start elsewhere with `-Port 8080` / `--port 8080`.
+
+**`start` fails during the build.** That is the typecheck refusing to ship a
+broken bundle — the error above the failure is the real one. `-SkipBuild` will
+serve the last good `dist/` if you need the app up right now.
+
+**`stop` says nothing was running but the browser still loads the page.** You are
+looking at a cached tab, or a server started some other way. `stop.cmd -All`
+releases both the preview and dev ports.
+
+**A panel shows "could not be decoded".** The browser has no decoder for that
+codec or container — ProRes, DNxHD, H.265 on some builds, or 10-bit sources.
+Transcode to H.264/MP4 or VP9/WebM.
+
+**Frame rate says `probing…` forever.** Frame rate is measured from presented
+frames, so it resolves once the clip has played briefly. In Firefox the required
+API is missing and the studio falls back to 30 fps.
+
+**No sound.** The studio starts globally muted by design. Unmute in the footer,
+then check the panel's own speaker.
+
+**I still see black bars around a picture.** Either an aspect lock is on, or you
+dragged a splitter — in both cases the panel is no longer the picture's shape.
+Switch **Fit** to **Fill** to crop instead, or set **Aspect** back to **Free**,
+which also clears any widths you dragged.
+
+**Panels drift on very large files.** Drift correction runs continuously, but a
+decoder that cannot keep up with, say, four 4K streams will fall behind faster
+than it can be nudged. Use proxies for heavy comparisons, or fewer panels.
+
+**Frame stepping lands on the wrong frame.** Stepping uses the master clip's
+measured rate. If clips have different frame rates, step on the timeline of the
+longest one — that is the master.
+
+---
+
+## Support the work
+
+If ABCvers Studio saves you time, you can say thank you with a small gift:
+
+**☕ [geekatplay.gumroad.com/coffee](https://geekatplay.gumroad.com/coffee)**
+
+The link sits in the top toolbar and the bottom transport bar, so it is always
+one click away — and never in the way of the work.
+
+---
+
+## Credits and licence
+
+**ABCvers Studio** — designed and built for **Geekatplay Studio**.
+Concept and direction: **Vladimir Chopine**.
+
+GitHub Repository: [github.com/GeekatplayStudio/ABCvers-Studio](https://github.com/GeekatplayStudio/ABCvers-Studio)
+
+Released under the MIT Licence.
