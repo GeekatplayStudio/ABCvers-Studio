@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useRef } from 'react'
 import type { MediaItem } from '../types'
 import { effectiveVolume, useStudio } from '../store/useStudio'
 import { syncEngine } from '../lib/sync'
-import { aspectOf, metaFromImage, metaFromVideo, probeFps } from '../lib/media'
+import { aspectOf, metaFromImage, metaFromVideo, primeFps } from '../lib/media'
 import { MediaSurface } from './MediaSurface'
 import { MediaInfo } from './MediaInfo'
 import { Scrubber } from './Scrubber'
@@ -53,6 +53,8 @@ export const MediaPanel = memo(function MediaPanel({
 
   // ---- audio: push the resolved level straight onto the element -----------
   const level = effectiveVolume(item, globalVolume, globalMuted)
+  const levelRef = useRef(level)
+  levelRef.current = level
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
@@ -61,16 +63,35 @@ export const MediaPanel = memo(function MediaPanel({
     video.muted = level === 0
   }, [level])
 
+  // Guards the async fps probe below against acting on a panel that has
+  // already closed - `primeFps` can still be mid-flight after that happens.
+  const aliveRef = useRef(true)
+  useEffect(() => () => {
+    aliveRef.current = false
+  }, [])
+
   // ---- registration with the sync engine ---------------------------------
   const onLoadedMetadata = useCallback(() => {
     const video = videoRef.current
     if (!video) return
-    const meta = metaFromVideo(video)
-    setMeta(item.id, meta)
-    syncEngine.register(item.id, video, meta.fps || undefined)
-    void probeFps(video).then((fps) => {
+    setMeta(item.id, metaFromVideo(video))
+
+    // Measuring fps needs real presented frames, which a freshly loaded,
+    // still-paused clip does not have - so this briefly (and silently, muted)
+    // plays the clip to get them, then rewinds. Registration is deliberately
+    // deferred until that finishes: the sync engine corrects every follower
+    // toward the master on every animation frame regardless of play state, so
+    // registering first would have it fight the priming playback back to the
+    // master's position on the very next frame, starving the probe of the
+    // frame-to-frame gaps it needs.
+    void primeFps(video).then((fps) => {
+      if (!aliveRef.current || videoRef.current !== video) return
+      // The priming play forces `muted` for browser autoplay policy and
+      // restores whatever it found - reassert the panel's actual, possibly
+      // since-changed, volume choice rather than trust that snapshot.
+      video.muted = levelRef.current === 0
       setFps(item.id, fps)
-      syncEngine.setFps(item.id, fps)
+      syncEngine.register(item.id, video, fps)
     })
   }, [item.id, setFps, setMeta])
 

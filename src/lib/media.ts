@@ -140,20 +140,24 @@ export function metaFromImage(image: HTMLImageElement): MediaMeta {
   }
 }
 
+type RVFCVideo = HTMLVideoElement & {
+  requestVideoFrameCallback?: (cb: (now: number, meta: { mediaTime: number }) => void) => number
+  cancelVideoFrameCallback?: (handle: number) => void
+}
+
 /**
  * Estimate frame rate from real presented frames.
  *
  * There is no browser API that reports a file's frame rate, so we watch
  * `requestVideoFrameCallback` and take the median gap between presentation
  * timestamps - medians shrug off the occasional dropped frame. Falls back to
- * 30 fps when the API is missing (Firefox) or the sample is too noisy.
+ * 30 fps when the API is missing (Firefox), the sample is too noisy, or - the
+ * common case - the clip never presented a second frame because it was never
+ * playing. That last case is why callers should generally prefer `primeFps`,
+ * which guarantees real frames get presented before this runs.
  */
-export function probeFps(video: HTMLVideoElement, samples = 12): Promise<number> {
-  type RVFC = HTMLVideoElement & {
-    requestVideoFrameCallback?: (cb: (now: number, meta: { mediaTime: number }) => void) => number
-    cancelVideoFrameCallback?: (handle: number) => void
-  }
-  const el = video as RVFC
+export function probeFps(video: HTMLVideoElement, samples = 12, timeoutMs = 2000): Promise<number> {
+  const el = video as RVFCVideo
   if (typeof el.requestVideoFrameCallback !== 'function') {
     return Promise.resolve(DEFAULT_FPS)
   }
@@ -174,7 +178,7 @@ export function probeFps(video: HTMLVideoElement, samples = 12): Promise<number>
       resolve(safeFps(value) || DEFAULT_FPS)
     }
 
-    const timer = setTimeout(() => finish(median(gaps)), 2000)
+    const timer = setTimeout(() => finish(median(gaps)), timeoutMs)
 
     const onFrame = (_now: number, meta: { mediaTime: number }) => {
       if (previous >= 0) {
@@ -191,6 +195,64 @@ export function probeFps(video: HTMLVideoElement, samples = 12): Promise<number>
 
     handle = el.requestVideoFrameCallback!(onFrame)
   })
+}
+
+export interface PrimeFpsOptions {
+  samples?: number
+  timeoutMs?: number
+}
+
+/**
+ * Get a trustworthy frame-rate reading right after a clip loads, instead of
+ * whatever `probeFps` happens to see.
+ *
+ * A freshly loaded clip is paused - the studio does not autoplay - and
+ * `requestVideoFrameCallback` only fires when a *new* frame is actually
+ * presented. Calling `probeFps` on a paused clip therefore almost always
+ * times out with zero samples and quietly reports the DEFAULT_FPS fallback
+ * as if it were measured, which is indistinguishable from a real 30fps clip
+ * in the UI. This runs a brief, muted priming playback purely to collect a
+ * few genuine frames, then restores the clip to exactly where it was. If
+ * autoplay is refused for any reason it falls back to the plain (passive)
+ * probe rather than failing.
+ *
+ * Deliberately plays at the normal rate rather than sped up: a decoder that
+ * cannot keep up in real time (slow hardware, a virtualized/headless
+ * environment, a very heavy source) silently drops presented frames to catch
+ * up, which doubles or triples the *apparent* gap between the frames that do
+ * get presented - and this measurement has exactly one job, so a probe that
+ * quietly reports half the true rate is a worse bug than the slightly longer
+ * flash of a normal-speed one.
+ */
+export async function primeFps(video: HTMLVideoElement, options: PrimeFpsOptions = {}): Promise<number> {
+  const { samples = 8, timeoutMs = 900 } = options
+  const el = video as RVFCVideo
+  if (typeof el.requestVideoFrameCallback !== 'function') {
+    return DEFAULT_FPS
+  }
+
+  const resumeTime = video.currentTime
+  const wasMuted = video.muted
+
+  video.muted = true
+
+  try {
+    await video.play()
+  } catch {
+    video.muted = wasMuted
+    return probeFps(video, samples)
+  }
+
+  const fps = await probeFps(video, samples, timeoutMs)
+
+  try {
+    video.pause()
+  } catch {
+    /* element may have been detached mid-probe */
+  }
+  video.currentTime = resumeTime
+  video.muted = wasMuted
+  return fps
 }
 
 export function median(values: number[]): number {

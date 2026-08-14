@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { __resetIdCounter, aspectOf, createId, intakeFiles, median } from './media'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { __resetIdCounter, aspectOf, createId, intakeFiles, median, primeFps, probeFps } from './media'
 import { MAX_PANELS } from './guards'
 import type { MediaItem } from '../types'
 
@@ -114,5 +114,139 @@ describe('aspectOf', () => {
   it('falls back while metadata is still loading', () => {
     expect(aspectOf({ ...base, meta: null })).toBeCloseTo(16 / 9)
     expect(aspectOf({ ...base, meta: { width: 0, height: 0, duration: 0, fps: 0 } }, 1)).toBe(1)
+  })
+})
+
+/**
+ * Minimal stand-in for HTMLVideoElement's requestVideoFrameCallback surface.
+ * `fire` simulates a browser presenting a frame at the given media time and
+ * re-captures whatever callback the code under test re-registered with, so a
+ * test can drive an arbitrary sequence of "frames" one call at a time.
+ */
+function fakeRvfcVideo(overrides: Record<string, unknown> = {}) {
+  let latest: ((now: number, meta: { mediaTime: number }) => void) | null = null
+  let handleSeq = 0
+  const video = {
+    currentTime: 0,
+    playbackRate: 1,
+    muted: false,
+    duration: 10,
+    paused: true,
+    play: vi.fn(function (this: typeof video) {
+      this.paused = false
+      return Promise.resolve()
+    }),
+    pause: vi.fn(function (this: typeof video) {
+      this.paused = true
+    }),
+    requestVideoFrameCallback: vi.fn((cb: (now: number, meta: { mediaTime: number }) => void) => {
+      latest = cb
+      return ++handleSeq
+    }),
+    cancelVideoFrameCallback: vi.fn(),
+    ...overrides,
+  }
+  return {
+    video: video as unknown as HTMLVideoElement,
+    fire: (mediaTime: number) => {
+      const cb = latest
+      latest = null
+      cb?.(0, { mediaTime })
+    },
+  }
+}
+
+describe('probeFps', () => {
+  it('resolves the default immediately when the browser has no frame callback API', async () => {
+    const video = { duration: 10 } as unknown as HTMLVideoElement // no requestVideoFrameCallback
+    await expect(probeFps(video)).resolves.toBe(30)
+  })
+
+  it('measures fps from the median gap between presented frames', async () => {
+    const { video, fire } = fakeRvfcVideo()
+    const promise = probeFps(video, 4)
+    for (let i = 0; i <= 4; i++) fire(i / 30)
+    await expect(promise).resolves.toBe(30)
+  })
+
+  it('falls back to the default when the clip never presents a second frame', async () => {
+    vi.useFakeTimers()
+    try {
+      const { video, fire } = fakeRvfcVideo()
+      const promise = probeFps(video, 4, 2000)
+      fire(0) // one frame only - no gap can be computed from it
+      await vi.advanceTimersByTimeAsync(2100)
+      await expect(promise).resolves.toBe(30)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('primeFps', () => {
+  it('never touches playback when the browser has no frame callback API', async () => {
+    const play = vi.fn()
+    const video = { duration: 10, play } as unknown as HTMLVideoElement
+    await expect(primeFps(video)).resolves.toBe(30)
+    expect(play).not.toHaveBeenCalled()
+  })
+
+  it('primes a brief muted playback, at normal speed, to measure a paused clip truthfully', async () => {
+    const { video, fire } = fakeRvfcVideo({ currentTime: 2.5, playbackRate: 1, muted: false })
+    const promise = primeFps(video, { samples: 3 })
+
+    // let `await video.play()` settle before the probe registers its callback
+    await Promise.resolve()
+    await Promise.resolve()
+    expect((video as unknown as { muted: boolean }).muted).toBe(true)
+    // normal speed, deliberately: see the comment on primeFps for why a sped-up
+    // probe is a correctness bug waiting to happen, not just a nice-to-have
+    expect((video as unknown as { playbackRate: number }).playbackRate).toBe(1)
+
+    for (let i = 0; i <= 3; i++) fire(i / 25)
+
+    await expect(promise).resolves.toBe(25)
+    const v = video as unknown as {
+      play: ReturnType<typeof vi.fn>
+      pause: ReturnType<typeof vi.fn>
+      currentTime: number
+      playbackRate: number
+      muted: boolean
+    }
+    expect(v.play).toHaveBeenCalledTimes(1)
+    expect(v.pause).toHaveBeenCalledTimes(1)
+    // exactly where it was before priming - a silent measurement, not a seek
+    expect(v.currentTime).toBe(2.5)
+    expect(v.playbackRate).toBe(1)
+    expect(v.muted).toBe(false)
+  })
+
+  it('falls back to a passive probe when autoplay is refused, and still restores state', async () => {
+    vi.useFakeTimers()
+    try {
+      const { video } = fakeRvfcVideo({
+        muted: false,
+        playbackRate: 1,
+        play: vi.fn(() => Promise.reject(new Error('NotAllowedError'))),
+      })
+      const promise = primeFps(video, { samples: 4 })
+      await vi.advanceTimersByTimeAsync(2100)
+      await expect(promise).resolves.toBe(30)
+      const v = video as unknown as { muted: boolean; playbackRate: number }
+      expect(v.muted).toBe(false)
+      expect(v.playbackRate).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('bounds the priming probe well under the passive one, so the flash stays brief', async () => {
+    const { video, fire } = fakeRvfcVideo()
+    const promise = primeFps(video, { samples: 2, timeoutMs: 100 })
+    await Promise.resolve()
+    await Promise.resolve()
+    fire(0)
+    fire(1 / 60) // one gap is not enough to satisfy samples=2, so this times out
+    await expect(promise).resolves.toBe(60)
   })
 })

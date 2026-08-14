@@ -6,7 +6,7 @@
 By **Geekatplay Studio** — *Vladimir Chopine*.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-e8813a.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-175%20passing-2e9e5b.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-182%20passing-2e9e5b.svg)](#testing)
 [![Built with React](https://img.shields.io/badge/react-18-1e2126.svg?logo=react)](https://react.dev)
 [![Built with Vite](https://img.shields.io/badge/vite-6-1e2126.svg?logo=vite)](https://vitejs.dev)
 [![TypeScript](https://img.shields.io/badge/typescript-strict-1e2126.svg?logo=typescript)](tsconfig.json)
@@ -379,8 +379,13 @@ Frame rate is **measured** rather than read from a header: no browser API expose
 a file's frame rate, so the studio watches `requestVideoFrameCallback` and takes
 the median gap between presented frames, then snaps the result onto the nearest
 standard broadcast rate (23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, …). Medians
-shrug off dropped frames. Browsers without that API (Firefox) fall back to 30 fps,
-which only affects frame stepping and the frame counter.
+shrug off dropped frames. That needs a few real, decoded frames to work with,
+which a freshly loaded, still-paused clip does not have - so the moment a clip's
+metadata is ready, it plays silently and briefly (muted, a few frames' worth) to
+get them, then rewinds to exactly where it was. You will see a short flash, and
+then a correct reading, rather than "probing…" hanging until you press play.
+Browsers without the frame-callback API (Firefox) fall back to 30 fps, which
+only affects frame stepping and the frame counter.
 
 ---
 
@@ -557,7 +562,7 @@ npm run test:watch
 npm run coverage  # v8 coverage report in ./coverage
 ```
 
-**175 tests across 12 files**, all passing. The suite is weighted towards the
+**182 tests across 12 files**, all passing. The suite is weighted towards the
 logic that is hard to eyeball:
 
 | File | Covers |
@@ -566,7 +571,7 @@ logic that is hard to eyeball:
 | `lib/zoom.test.ts` | Rect clamping, marquee normalization, transform maths, gutter clamping, magnification cap, inverse round-trip, zoom composition, panning, letterbox/pillarbox content boxes — and an explicit assertion of the cross-panel synchronization invariant. |
 | `lib/guards.test.ts` | Classification by MIME and by extension, size and emptiness rejection, numeric coercion, `NaN` handling. |
 | `lib/format.test.ts` | Byte scaling, clock and SMPTE timecode (including the floating-point edges that make `62.48` print `.479`), duration, aspect reduction, middle truncation. |
-| `lib/media.test.ts` | File intake, panel limit accounting, object-URL failures, frame-rate median and broadcast-rate snapping, aspect fallbacks. |
+| `lib/media.test.ts` | File intake, panel limit accounting, object-URL failures, frame-rate median and broadcast-rate snapping, aspect fallbacks, and the priming probe itself: that it actually plays to get real samples, restores position/mute exactly, runs at normal (not sped-up) speed, and falls back cleanly when autoplay is refused. |
 | `lib/layout.test.ts` | Auto columns, row chunking, aspect-derived weights, splitter conservation, and `fitRow`: shared height, integer edges, height- vs width-constrained rows, strip reservation, no overflow. |
 | `components/Stage.test.tsx` | The edge-to-edge guarantee against the real DOM: a 16:9 and a 1:1 panel come out 768x432 and 432x432 sharing one height, widths summing to the full row; mixed orientations keep integer edges; locked aspect gives identical boxes; short rows are height-constrained; multi-row splitting. |
 | `store/useStudio.test.ts` | Add/remove/reorder, URL revocation, metadata, zoom state, the volume/mute/solo matrix, layout state, toasts. |
@@ -667,9 +672,11 @@ releases both the preview and dev ports.
 codec or container — ProRes, DNxHD, H.265 on some builds, or 10-bit sources.
 Transcode to H.264/MP4 or VP9/WebM.
 
-**Frame rate says `probing…` forever.** Frame rate is measured from presented
-frames, so it resolves once the clip has played briefly. In Firefox the required
-API is missing and the studio falls back to 30 fps.
+**Frame rate says `probing…` for more than a second or two.** It resolves itself
+automatically the moment the clip has decoded a handful of frames - normally
+under a second, even without you pressing play (see [Media info](#media-info)).
+If it genuinely hangs, the file is decoding unusually slowly. In Firefox the
+frame-callback API is missing entirely and the studio falls back to 30 fps.
 
 **No sound.** The studio starts globally muted by design. Unmute in the footer,
 then check the panel's own speaker.
