@@ -22,6 +22,7 @@ const COLUMN_OPTIONS: (number | 'auto')[] = ['auto', 1, 2, 3, 4, 5, 6]
 
 export function Toolbar({ onHelp }: { onHelp: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const penButtonRef = useRef<HTMLButtonElement>(null)
   const items = useStudio((state) => state.items)
   const aspect = useStudio((state) => state.aspect)
   const fitMode = useStudio((state) => state.fitMode)
@@ -200,6 +201,7 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
         </button>
         <div className="pen-anchor">
           <button
+            ref={penButtonRef}
             type="button"
             className="btn"
             aria-pressed={drawMode}
@@ -217,7 +219,12 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
             <span className="pen-swatch" aria-hidden="true" />
           </button>
           {colorPickerOpen && (
-            <PenColorPicker color={drawColor} onSelect={setDrawColor} onClose={() => setColorPickerOpen(false)} />
+            <PenColorPicker
+              color={drawColor}
+              anchorRef={penButtonRef}
+              onSelect={setDrawColor}
+              onClose={() => setColorPickerOpen(false)}
+            />
           )}
         </div>
         <button

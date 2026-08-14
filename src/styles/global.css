@@ -429,10 +429,11 @@ button {
 }
 
 .pen-picker {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 30;
+  /* top/left are set inline from the pen button's own screen position -
+     it is portaled to document.body so the toolbar's horizontal scrollbar
+     (overflow-x: auto, which forces overflow-y: auto too) cannot clip it. */
+  position: fixed;
+  z-index: 70;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 7px;
