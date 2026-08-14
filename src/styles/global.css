@@ -124,7 +124,7 @@ button {
   transform-box: fill-box;
   transform-origin: center;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.7));
-  animation: annotation-pulse 1.9s ease-in-out infinite;
+  animation: annotation-pulse 2.6s ease-in-out infinite;
 }
 
 .annotation-stroke--live {
@@ -139,8 +139,8 @@ button {
     opacity: 1;
   }
   50% {
-    transform: scale(1.07);
-    opacity: 0.82;
+    transform: scale(1.025);
+    opacity: 0.92;
   }
 }
 
