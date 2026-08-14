@@ -658,6 +658,18 @@ stroke. Pen mode and zoom-marquee mode are mutually exclusive at the store
 level - each one turning on switches the other off - since both claim a drag
 gesture over the same panels.
 
+[`src/components/PenColorPicker.tsx`](src/components/PenColorPicker.tsx) is
+portaled straight to `document.body` rather than rendered as a normal
+absolutely-positioned child of the toolbar, positioned instead from the pen
+button's own `getBoundingClientRect()`. The toolbar scrolls horizontally on
+narrow windows (`overflow-x: auto`), which per the CSS spec forces
+`overflow-y` to compute as `auto` too - so a popover left as a child of the
+toolbar was silently clipped at its bottom edge instead of floating over the
+panels below. The portal sidesteps that clipping and any stacking-context
+ambiguity entirely; it closes itself on scroll or resize rather than tracking
+the anchor, since a screen-coordinate popover goes stale the moment the page
+moves under it.
+
 ### Performance
 
 The tool has to stay smooth with a dozen decoders running, so:
@@ -737,7 +749,7 @@ logic that is hard to eyeball:
 | `lib/draw.test.ts` | Pen colours (contents, uniqueness, default), point distance, freehand-smoothing maths (empty/single-point/multi-point/deterministic), coordinate scaling, stroke-id uniqueness, and the guardrail constants. |
 | `components/Stage.test.tsx` | The edge-to-edge guarantee against the real DOM: a 16:9 and a 1:1 panel come out 768x432 and 432x432 sharing one height, widths summing to the full row; mixed orientations keep integer edges; locked aspect gives identical boxes; short rows are height-constrained; multi-row splitting. |
 | `components/DrawingLayer.test.tsx` | Inert (no drag recorded) with the pen off, active with it on; a drag commits a stroke in the current colour at the correct normalized coordinates; near-duplicate points are thinned; a click with no movement still leaves a one-point dot; right-button drags are ignored; every persisted stroke renders; the native context menu is suppressed only while the pen is active. |
-| `components/PenColorPicker.test.tsx` | Every configured colour listed, the current one marked checked, selecting one closes the popover, Escape and outside-click both close it, and the same click that opened it does not immediately close it again. |
+| `components/PenColorPicker.test.tsx` | Every configured colour listed, the current one marked checked, selecting one closes the popover, Escape/outside-click/scroll/resize all close it, and the same click that opened it does not immediately close it again. |
 | `store/useStudio.test.ts` | Add/remove/reorder, URL revocation, metadata, zoom state, the volume/mute/solo matrix, layout state, toasts, and the drawing state: strokes append in order, retire past the 300-stroke cap, clear individually or via `clearAll()`, and pen/zoom mode are mutually exclusive. |
 | `components/*.test.tsx` | Scrubber, volume and exposure pointer/keyboard interaction and ARIA; media info rendering for video, stills, EXR, DNG, loading and error states; the render-time overlay's value binding and that it stops its own pointer events from reaching the marquee/pan layer underneath it. |
 | `App.test.tsx` | Whole-shell integration: rendering panels, closing, reordering, layout, aspect and fit controls, zoom controls, rejection toasts, loop default, both coffee links, frame stepping from the footer and from panels, the render-time boxes (hidden by default, values survive hiding, gone when the panel closes, and typing a "t" while entering one doesn't toggle them away mid-word), drawing across panels and clearing it, the pen colour picker, pen/zoom mode exclusivity, and every keyboard shortcut. |
