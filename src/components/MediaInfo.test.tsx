@@ -18,6 +18,7 @@ const video: MediaItem = {
   weight: 1,
   imageDecoder: null,
   exposure: 0,
+  renderTime: '',
 }
 
 describe('MediaInfo', () => {

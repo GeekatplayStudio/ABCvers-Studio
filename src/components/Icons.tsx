@@ -178,3 +178,12 @@ export const HelpIcon = (p: IconProps) => (
     <path d="M12 16.8h.01" />
   </Svg>
 )
+
+export const StopwatchIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="13" r="8" />
+    <path d="M12 9v4l3 2" />
+    <path d="M9.5 2.5h5" />
+    <path d="M18.5 5.5l1.5-1.5" />
+  </Svg>
+)

@@ -9,6 +9,7 @@ import {
   InfoIcon,
   PlusIcon,
   ResetIcon,
+  StopwatchIcon,
   TrashIcon,
   ZoomIcon,
 } from './Icons'
@@ -26,6 +27,7 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
   const zoom = useStudio((state) => state.zoom)
   const zoomMode = useStudio((state) => state.zoomMode)
   const showInfo = useStudio((state) => state.showInfo)
+  const showRenderTime = useStudio((state) => state.showRenderTime)
   const addFiles = useStudio((state) => state.addFiles)
   const clearAll = useStudio((state) => state.clearAll)
   const setAspect = useStudio((state) => state.setAspect)
@@ -34,6 +36,7 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
   const toggleZoomMode = useStudio((state) => state.toggleZoomMode)
   const resetZoom = useStudio((state) => state.resetZoom)
   const toggleInfo = useStudio((state) => state.toggleInfo)
+  const toggleRenderTime = useStudio((state) => state.toggleRenderTime)
 
   const onPick = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,6 +197,16 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
           aria-label="Toggle media info"
         >
           <InfoIcon size={15} />
+        </button>
+        <button
+          type="button"
+          className="btn btn--icon"
+          aria-pressed={showRenderTime}
+          onClick={toggleRenderTime}
+          title="Show editable render-time boxes on every panel (T)"
+          aria-label="Toggle render time boxes"
+        >
+          <StopwatchIcon size={15} />
         </button>
         <button
           type="button"

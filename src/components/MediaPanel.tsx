@@ -9,6 +9,7 @@ import { MediaInfo } from './MediaInfo'
 import { Scrubber } from './Scrubber'
 import { VolumeControl } from './VolumeControl'
 import { ExposureControl } from './ExposureControl'
+import { RenderTimeOverlay } from './RenderTimeOverlay'
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -39,6 +40,8 @@ export const MediaPanel = memo(function MediaPanel({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const showInfo = useStudio((state) => state.showInfo)
   const showOverlayName = useStudio((state) => state.showOverlayName)
+  const showRenderTime = useStudio((state) => state.showRenderTime)
+  const setRenderTime = useStudio((state) => state.setRenderTime)
   const globalVolume = useStudio((state) => state.globalVolume)
   const globalMuted = useStudio((state) => state.globalMuted)
   const removeItem = useStudio((state) => state.removeItem)
@@ -222,6 +225,13 @@ export const MediaPanel = memo(function MediaPanel({
                 <div className="panel__error" role="alert">
                   {item.error ?? 'Failed to load'}
                 </div>
+              )}
+              {showRenderTime && (
+                <RenderTimeOverlay
+                  value={item.renderTime}
+                  onChange={(value) => setRenderTime(item.id, value)}
+                  label={item.name}
+                />
               )}
             </>
           }

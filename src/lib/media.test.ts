@@ -150,6 +150,7 @@ describe('aspectOf', () => {
     weight: null,
     imageDecoder: null,
     exposure: 0,
+    renderTime: '',
   }
 
   it('uses the intrinsic size', () => {

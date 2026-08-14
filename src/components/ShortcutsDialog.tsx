@@ -19,6 +19,7 @@ export const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: 'Alt + click speaker', action: 'Solo that panel' },
   { keys: 'I', action: 'Toggle info strips' },
   { keys: 'N', action: 'Toggle name overlays' },
+  { keys: 'T', action: 'Toggle render-time boxes' },
   { keys: 'F', action: 'Fullscreen' },
   { keys: '1 - 6', action: 'Set screens per row' },
   { keys: '0', action: 'Auto layout' },

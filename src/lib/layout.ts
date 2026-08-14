@@ -26,13 +26,16 @@ export function ratioFor(aspect: AspectKey): number | null {
   return ASPECT_OPTIONS.find((option) => option.key === aspect)?.ratio ?? null
 }
 
-/** `auto` picks a column count that keeps panels as large as possible. */
+/**
+ * `auto` keeps every panel in a single row, however many there are - a
+ * comparison is between all of them at once, and wrapping into a grid once a
+ * fifth or sixth panel is added means the panels people are actively
+ * comparing are no longer side by side on screen together. `fitRow` still
+ * shrinks panels to fit, so more panels means narrower ones, never a second
+ * row.
+ */
 export function autoColumns(count: number): number {
-  if (count <= 0) return 1
-  if (count <= 4) return count
-  if (count <= 6) return 3
-  if (count <= 9) return 3
-  return 4
+  return Math.max(1, count)
 }
 
 export function resolveColumns(count: number, columns: number | 'auto'): number {

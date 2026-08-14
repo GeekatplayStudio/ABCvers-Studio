@@ -79,6 +79,7 @@ export function intakeFiles(files: readonly File[], options: IntakeOptions = {})
       weight: null,
       imageDecoder: verdict.kind === 'image' ? imageDecoderForExtension(file.name) : null,
       exposure: 0,
+      renderTime: '',
     })
   }
 

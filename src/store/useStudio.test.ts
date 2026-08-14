@@ -21,6 +21,7 @@ beforeEach(() => {
     aspect: 'free',
     fitMode: 'fit',
     columns: 'auto',
+    showRenderTime: false,
   })
   vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`)
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
@@ -152,6 +153,7 @@ describe('audio', () => {
     weight: null,
     imageDecoder: null,
     exposure: 0,
+    renderTime: '',
     ...over,
   })
 
@@ -263,5 +265,54 @@ describe('toasts', () => {
     const id = useStudio.getState().toasts[0]!.id
     useStudio.getState().dismissToast(id)
     expect(useStudio.getState().toasts.find((t) => t.id === id)).toBeUndefined()
+  })
+})
+
+describe('render time', () => {
+  it('starts blank for a new item, and off by default', () => {
+    useStudio.getState().addFiles([fakeFile('a.mp4')])
+    expect(useStudio.getState().items[0]!.renderTime).toBe('')
+    expect(useStudio.getState().showRenderTime).toBe(false)
+  })
+
+  it('toggles the global visibility flag', () => {
+    useStudio.getState().toggleRenderTime()
+    expect(useStudio.getState().showRenderTime).toBe(true)
+    useStudio.getState().toggleRenderTime()
+    expect(useStudio.getState().showRenderTime).toBe(false)
+  })
+
+  it('sets a value on exactly the named item, leaving others untouched', () => {
+    useStudio.getState().addFiles([fakeFile('a.mp4'), fakeFile('b.mp4')])
+    const [a] = ids()
+    useStudio.getState().setRenderTime(a!, '2m 45s')
+    expect(useStudio.getState().items[0]!.renderTime).toBe('2m 45s')
+    expect(useStudio.getState().items[1]!.renderTime).toBe('')
+  })
+
+  it('keeps the value while the overlay is hidden, and shows it again when reopened', () => {
+    useStudio.getState().addFiles([fakeFile('a.mp4')])
+    const id = ids()[0]!
+    useStudio.getState().toggleRenderTime() // show
+    useStudio.getState().setRenderTime(id, '1h 12m')
+    useStudio.getState().toggleRenderTime() // hide
+    expect(useStudio.getState().items[0]!.renderTime).toBe('1h 12m') // still there, just not shown
+    useStudio.getState().toggleRenderTime() // show again
+    expect(useStudio.getState().items[0]!.renderTime).toBe('1h 12m')
+  })
+
+  it('is gone once the item is removed, and never comes back for a new item with the same slot', () => {
+    useStudio.getState().addFiles([fakeFile('a.mp4')])
+    const id = ids()[0]!
+    useStudio.getState().setRenderTime(id, '45s')
+    useStudio.getState().removeItem(id)
+    useStudio.getState().addFiles([fakeFile('a.mp4')]) // a fresh item, new id
+    expect(useStudio.getState().items[0]!.renderTime).toBe('')
+  })
+
+  it('setting a value on a missing id is a harmless no-op', () => {
+    useStudio.getState().addFiles([fakeFile('a.mp4')])
+    expect(() => useStudio.getState().setRenderTime('does-not-exist', '5s')).not.toThrow()
+    expect(useStudio.getState().items[0]!.renderTime).toBe('')
   })
 })

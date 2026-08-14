@@ -71,6 +71,30 @@ describe('ABCvers Studio shell', () => {
     expect(screen.queryByTestId(/^meta-/)).not.toBeInTheDocument()
   })
 
+  it('render-time boxes: off by default, typed values survive hiding, gone once the panel closes', () => {
+    render(<App />)
+    addMedia(fakeFile('a.mp4'), fakeFile('b.mp4'))
+    expect(screen.queryByTestId('render-time-input')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle render time boxes' }))
+    const inputs = screen.getAllByTestId('render-time-input')
+    expect(inputs).toHaveLength(2)
+    fireEvent.change(inputs[0]!, { target: { value: '2m 45s' } })
+
+    // hide
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle render time boxes' }))
+    expect(screen.queryByTestId('render-time-input')).not.toBeInTheDocument()
+    expect(useStudio.getState().items[0]!.renderTime).toBe('2m 45s') // saved while hidden
+
+    // show again - the typed value is still there
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle render time boxes' }))
+    expect(screen.getAllByTestId('render-time-input')[0]).toHaveValue('2m 45s')
+
+    // closing the panel drops its value for good
+    fireEvent.click(screen.getByRole('button', { name: 'Close a.mp4' }))
+    expect(useStudio.getState().items.map((i) => i.renderTime)).toEqual([''])
+  })
+
   it('lays panels out in rows of the chosen column count', () => {
     render(<App />)
     addMedia(...Array.from({ length: 6 }, (_, i) => fakeFile(`c${i}.mp4`)))
@@ -228,6 +252,15 @@ describe('keyboard shortcuts', () => {
     expect(useStudio.getState().globalMuted).toBe(!before)
   })
 
+  it('t toggles the render-time boxes', () => {
+    render(<App />)
+    expect(useStudio.getState().showRenderTime).toBe(false)
+    fireEvent.keyDown(window, { key: 't' })
+    expect(useStudio.getState().showRenderTime).toBe(true)
+    fireEvent.keyDown(window, { key: 't' })
+    expect(useStudio.getState().showRenderTime).toBe(false)
+  })
+
   it('number keys set the column count', () => {
     render(<App />)
     fireEvent.keyDown(window, { key: '3' })
@@ -242,6 +275,16 @@ describe('keyboard shortcuts', () => {
     const slider = screen.getAllByRole('slider')[0]!
     fireEvent.keyDown(slider, { key: 'z' })
     expect(useStudio.getState().zoomMode).toBe(false)
+  })
+
+  it('typing "t" while entering a render time does not toggle the boxes away mid-word', () => {
+    render(<App />)
+    addMedia(fakeFile('a.mp4'))
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle render time boxes' }))
+    expect(useStudio.getState().showRenderTime).toBe(true)
+    const input = screen.getByTestId('render-time-input')
+    fireEvent.keyDown(input, { key: 't' })
+    expect(useStudio.getState().showRenderTime).toBe(true) // "took 2 minutes" must not blink the box away
   })
 
   it('? opens the shortcut reference and escape closes it', () => {

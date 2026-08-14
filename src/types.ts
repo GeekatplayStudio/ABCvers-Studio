@@ -55,6 +55,12 @@ export interface MediaItem {
   /** EXR exposure adjustment, in stops. Meaningless outside imageDecoder 'exr'. */
   exposure: number
   /**
+   * Free-text note on how long this asset took to render, entered by hand -
+   * this app has no way to know that itself. Session-only: gone with the
+   * item, and never written anywhere that survives a page refresh.
+   */
+  renderTime: string
+  /**
    * Width override set by dragging a splitter, as a width-per-unit-height.
    * `null` means "follow the media / locked aspect ratio", which is what keeps
    * pictures edge to edge with no letterboxing.

@@ -87,6 +87,9 @@ export function useShortcuts(onHelp: () => void): void {
         case 'n':
           store.toggleOverlayName()
           break
+        case 't':
+          store.toggleRenderTime()
+          break
         case 'f':
           if (document.fullscreenElement) void document.exitFullscreen()
           else void document.documentElement.requestFullscreen?.().catch(() => undefined)

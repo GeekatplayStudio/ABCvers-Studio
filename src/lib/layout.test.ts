@@ -26,24 +26,27 @@ const item = (width: number, height: number, weight: number | null = null): Medi
   weight,
   imageDecoder: null,
   exposure: 0,
+  renderTime: '',
 })
 
 describe('columns', () => {
-  it('keeps small sets on one row', () => {
+  it('keeps every panel in a single row, however many there are', () => {
+    // Regression coverage: auto used to wrap once a fifth or sixth panel
+    // arrived, which put some of the panels someone is actively comparing
+    // on a second row, out of the same at-a-glance view as the rest.
     expect(autoColumns(1)).toBe(1)
     expect(autoColumns(4)).toBe(4)
-  })
-
-  it('wraps larger sets into a grid', () => {
-    expect(autoColumns(6)).toBe(3)
-    expect(autoColumns(12)).toBe(4)
+    expect(autoColumns(5)).toBe(5)
+    expect(autoColumns(6)).toBe(6)
+    expect(autoColumns(9)).toBe(9)
+    expect(autoColumns(12)).toBe(12)
     expect(autoColumns(0)).toBe(1)
   })
 
   it('never asks for more columns than there are panels', () => {
     expect(resolveColumns(2, 6)).toBe(2)
     expect(resolveColumns(6, 3)).toBe(3)
-    expect(resolveColumns(5, 'auto')).toBe(3)
+    expect(resolveColumns(5, 'auto')).toBe(5)
     expect(resolveColumns(0, 4)).toBe(1)
   })
 })

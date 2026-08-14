@@ -486,6 +486,54 @@ button {
   font-size: 11px;
 }
 
+.panel__rendertime {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(4, 5, 6, 0.88);
+  backdrop-filter: blur(3px);
+  pointer-events: auto;
+  cursor: text;
+}
+
+.panel__rendertime-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-hi);
+}
+
+.panel__rendertime-input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  padding: 2px 0 4px;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 600;
+  font-family: var(--font);
+  letter-spacing: 0.01em;
+}
+
+.panel__rendertime-input:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.panel__rendertime-input::placeholder {
+  color: rgba(255, 255, 255, 0.32);
+  font-weight: 400;
+}
+
 .panel__tools {
   position: absolute;
   top: 6px;

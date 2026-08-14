@@ -6,7 +6,7 @@
 By **Geekatplay Studio** — *Vladimir Chopine*.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-e8813a.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-249%20passing-2e9e5b.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-261%20passing-2e9e5b.svg)](#testing)
 [![Built with React](https://img.shields.io/badge/react-18-1e2126.svg?logo=react)](https://react.dev)
 [![Built with Vite](https://img.shields.io/badge/vite-6-1e2126.svg?logo=vite)](https://vitejs.dev)
 [![TypeScript](https://img.shields.io/badge/typescript-strict-1e2126.svg?logo=typescript)](tsconfig.json)
@@ -39,6 +39,7 @@ Everything runs locally in your browser. **No file is ever uploaded anywhere.**
   - [Audio](#audio)
   - [Synchronized zoom](#synchronized-zoom)
   - [Media info](#media-info)
+  - [Render time notes](#render-time-notes)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Supported formats](#supported-formats)
   - [HDR and log-encoded video](#hdr-and-log-encoded-video)
@@ -63,7 +64,8 @@ Everything runs locally in your browser. **No file is ever uploaded anywhere.**
 
 | | |
 |---|---|
-| **1–12 panels** | Any mix of videos and stills, side by side, pictures meeting edge to edge with nothing between them. |
+| **1–12 panels, always one row** | Any mix of videos and stills, side by side, edge to edge - Auto never wraps into a grid, however many panels are open. |
+| **Render time notes** | A large, editable black box on every panel at once (`T`) for noting how long each one took to render - your note, not a measurement. |
 | **Frame-accurate sync** | One transport drives every clip. Drift is corrected continuously. Loops by default. |
 | **Frame by frame, either way** | Single and ten-frame jogs from the footer, from any panel, or from the keyboard. |
 | **Synchronized zoom** | Marquee a detail in one panel; every panel magnifies the same region. |
@@ -233,9 +235,12 @@ the session with **Clear**. Reorder panels with the **‹** and **›** buttons.
 
 ### Layout and aspect ratio
 
-**Screens** picks how many panels sit in a row: `Auto`, or 1–6. `Auto` keeps up
-to four panels on one row and wraps larger sets into a grid, always choosing the
-arrangement that leaves each panel biggest.
+**Screens** picks how many panels sit in a row: `Auto`, or 1–6. `Auto` keeps
+**every** panel in a single row, however many there are — a comparison is
+between all of them at once, so wrapping into a grid would put some of what
+you're comparing out of the same glance as the rest. More panels means
+narrower ones, never a second row. Pick an explicit number instead if you
+*want* a grid — `3` with seven panels open wraps into rows of three.
 
 **Aspect** controls the shape of every panel:
 
@@ -403,6 +408,22 @@ read correctly. See the comment on `primeFps` in
 Browsers without the frame-callback API (Firefox) fall back to 30 fps, which
 only affects frame stepping and the frame counter.
 
+### Render time notes
+
+Nothing about a video file says how long it took to render - that only exists
+in your head, or in whatever tool produced it - so this is purely a note you
+type in by hand, for exactly that: comparing render times across tools or
+model versions side by side with the results themselves.
+
+Press **T** (or the stopwatch button in the toolbar) to show a large, editable
+black box at the bottom of **every** panel at once. Click into any of them and
+type - anything free-form works, "2m 45s", "45s", "1h 12m", whatever you
+prefer. Press **T** again to hide the boxes; whatever you typed is still there
+the next time you show them. The values live only in this session: closing a
+panel drops its note for good, and refreshing the page clears everything, the
+same as every other piece of session state in the studio - there is no
+localStorage or server behind it.
+
 ---
 
 ## Keyboard shortcuts
@@ -426,6 +447,7 @@ only affects frame stepping and the frame counter.
 | `Alt + click` speaker | Solo that panel |
 | `I` | Toggle info strips |
 | `N` | Toggle name overlays |
+| `T` | Toggle render-time boxes |
 | `F` | Fullscreen |
 | `1` … `6` | Screens per row |
 | `0` | Auto layout |
@@ -677,7 +699,7 @@ npm run test:watch
 npm run coverage  # v8 coverage report in ./coverage
 ```
 
-**249 tests across 15 files**, all passing. The suite is weighted towards the
+**261 tests across 16 files**, all passing. The suite is weighted towards the
 logic that is hard to eyeball:
 
 | File | Covers |
@@ -692,8 +714,8 @@ logic that is hard to eyeball:
 | `lib/layout.test.ts` | Auto columns, row chunking, aspect-derived weights, splitter conservation, and `fitRow`: shared height, integer edges, height- vs width-constrained rows, strip reservation, no overflow, and the footer-reservation cap that stops a tall info strip from shrinking a panel's picture without bound. |
 | `components/Stage.test.tsx` | The edge-to-edge guarantee against the real DOM: a 16:9 and a 1:1 panel come out 768x432 and 432x432 sharing one height, widths summing to the full row; mixed orientations keep integer edges; locked aspect gives identical boxes; short rows are height-constrained; multi-row splitting. |
 | `store/useStudio.test.ts` | Add/remove/reorder, URL revocation, metadata, zoom state, the volume/mute/solo matrix, layout state, toasts. |
-| `components/*.test.tsx` | Scrubber, volume and exposure pointer/keyboard interaction and ARIA; media info rendering for video, stills, EXR, DNG, loading and error states. |
-| `App.test.tsx` | Whole-shell integration: rendering panels, closing, reordering, layout, aspect and fit controls, zoom controls, rejection toasts, loop default, both coffee links, frame stepping from the footer and from panels, and every keyboard shortcut. |
+| `components/*.test.tsx` | Scrubber, volume and exposure pointer/keyboard interaction and ARIA; media info rendering for video, stills, EXR, DNG, loading and error states; the render-time overlay's value binding and that it stops its own pointer events from reaching the marquee/pan layer underneath it. |
+| `App.test.tsx` | Whole-shell integration: rendering panels, closing, reordering, layout, aspect and fit controls, zoom controls, rejection toasts, loop default, both coffee links, frame stepping from the footer and from panels, the render-time boxes (hidden by default, values survive hiding, gone when the panel closes, and typing a "t" while entering one doesn't toggle them away mid-word), and every keyboard shortcut. |
 
 `src/test/setup.ts` fills the jsdom gaps — media playback, object URLs,
 `ResizeObserver`, pointer capture, and a `PointerEvent` polyfill (without which
@@ -742,6 +764,7 @@ src/
     Scrubber.tsx           Ref-driven timeline control
     VolumeControl.tsx      Speaker + level
     ExposureControl.tsx    EXR exposure slider, centred on zero
+    RenderTimeOverlay.tsx  Editable render-time note, shown on every panel
     MediaInfo.tsx          Metadata strip
     TransportBar.tsx       Master transport
     EmptyState.tsx         Cold start

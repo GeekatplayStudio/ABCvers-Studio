@@ -31,6 +31,7 @@ export interface StudioState {
   loop: boolean
   showInfo: boolean
   showOverlayName: boolean
+  showRenderTime: boolean
   toasts: Toast[]
 
   addFiles: (files: readonly File[]) => void
@@ -63,6 +64,8 @@ export interface StudioState {
   setLoop: (loop: boolean) => void
   toggleInfo: () => void
   toggleOverlayName: () => void
+  toggleRenderTime: () => void
+  setRenderTime: (id: string, value: string) => void
 
   resizeSplit: (leftId: string, rightId: string, deltaFraction: number) => void
 
@@ -102,6 +105,7 @@ export const useStudio = create<StudioState>()((set, get) => ({
   loop: true, // comparison work is watched over and over - loop by default
   showInfo: true,
   showOverlayName: true,
+  showRenderTime: false,
   toasts: [],
 
   addFiles: (files) => {
@@ -244,6 +248,14 @@ export const useStudio = create<StudioState>()((set, get) => ({
   toggleInfo: () => set((state) => ({ showInfo: !state.showInfo })),
 
   toggleOverlayName: () => set((state) => ({ showOverlayName: !state.showOverlayName })),
+
+  toggleRenderTime: () => set((state) => ({ showRenderTime: !state.showRenderTime })),
+
+  setRenderTime: (id, value) => {
+    set((state) => ({
+      items: state.items.map((item) => (item.id === id ? { ...item, renderTime: value } : item)),
+    }))
+  },
 
   resizeSplit: (leftId, rightId, deltaFraction) => {
     set((state) => {
