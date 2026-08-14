@@ -17,9 +17,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "verify": "npm run typecheck && npm run lint && npm run test",
-    "app:install": "node scripts/run.mjs install",
-    "app:start": "node scripts/run.mjs start",
-    "app:stop": "node scripts/run.mjs stop"
+    "start": "npm run build && npm run serve"
   },
   "dependencies": {
     "react": "^18.3.1",

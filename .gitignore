@@ -1,7 +1,6 @@
 node_modules
 dist
 coverage
-.abcvers
 *.local
 .DS_Store
 .vscode/*

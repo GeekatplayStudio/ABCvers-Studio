@@ -134,82 +134,42 @@ three at once. This is the feature the tool is built around.
 Requirements: **Node.js 18+** (built and verified on Node 22) and a modern
 Chromium, Edge, Safari or Firefox build.
 
-### Quick Start
-
 ```bash
 git clone https://github.com/GeekatplayStudio/ABCvers-Studio.git
 cd ABCvers-Studio
 ```
 
-### Available scripts
+### The three scripts
 
-Run shell scripts directly:
+Right in the project root — double-click them, or run them from a terminal.
+Windows gets `.bat`, macOS/Linux get `.sh`; both do the same thing:
 
-```bash
-./scripts/install.sh
-./scripts/start.sh
-./scripts/stop.sh
-```
+| | Windows | macOS / Linux |
+|---|---|---|
+| Install dependencies | `install.bat` | `./install.sh` |
+| Build to `./dist` | `build.bat` | `./build.sh` |
+| Build, serve, open the browser | `start.bat` | `./start.sh` |
 
-Or via npm:
+`start` builds first (typechecking as part of that — a type error stops it,
+it does not ship a broken build), then serves `./dist` at
+**http://localhost:4173/** and opens it for you. It runs in the foreground:
+**Ctrl+C stops the server.** `install` and `build` are one-shot; `install`
+runs automatically if you skip straight to `build` or `start` without it.
 
-```bash
-npm run app:install
-npm run app:start
-npm run app:stop
-```
+Every one of them is a thin wrapper around a plain `npm` command underneath
+— nothing scripted here that `npm run build` or `npm run serve` doesn't
+already do on its own; they just chain the right ones together with a bit of
+friendlier output.
 
-That is the whole workflow: **install once, then start and stop.**
-
-### What each one does
-
-**install** checks that Node is present and recent enough, then installs from
-`package-lock.json` with `npm ci` for a reproducible tree.
-
-| Option | |
-|---|---|
-| `-Update` / `--update` | Use `npm install` instead, letting the lockfile change |
-| `-Verify` / `--verify` | Also typecheck, lint and run the full test suite |
-
-**start** installs dependencies if they are missing, runs the production build
-(**which typechecks first — a type error stops the start, it does not ship**),
-then launches the server detached and waits until it is genuinely accepting
-connections before telling you the URL. It records the process id and port in
-`.abcvers/server.json` so `stop` can shut down exactly that server. Default port
-**4173**.
-
-| Option | |
-|---|---|
-| `-Port 8080` / `--port 8080` | Listen somewhere else |
-| `-Dev` / `--dev` | Skip the build, run the hot-reloading dev server (port 5173) |
-| `-SkipBuild` / `--skip-build` | Serve the existing `dist/` without rebuilding |
-| `-Force` / `--force` | Stop a running instance and start fresh |
-| `-NoOpen` / `--no-open` | Do not open a browser |
-
-Start refuses to do damage: if an instance is already running it says so and
-opens that one rather than starting a second, and if the port is taken it names
-the process holding it instead of failing halfway through a build.
-
-**stop** shuts down the recorded process. If that record is missing or stale —
-machine rebooted, file deleted — it falls back to whatever is listening on the
-port, and **only ever stops a `node` process**, never something unrelated that
-happens to have taken the port.
-
-| Option | |
-|---|---|
-| `-Port 8080` / `--port 8080` | Also release another port |
-| `-All` / `--all` | Also release the dev port |
-
-Server output goes to `.abcvers/server.log`; the whole `.abcvers/` directory is
-scratch state and is git-ignored.
-
-### Working on the code directly
+### Or just use npm directly
 
 ```bash
-npm run dev      # hot-reloading dev server at http://localhost:5173
-npm run build    # typecheck, then bundle to ./dist
-npm run serve    # serve ./dist on 4173
-npm run verify   # typecheck + lint + tests
+npm install       # same as install.bat / install.sh
+npm start         # same as start.bat / start.sh - build, then serve, foreground
+npm run build     # same as build.bat / build.sh
+npm run dev       # hot-reloading dev server at http://localhost:5173
+npm run serve     # serve the existing ./dist on 4173, no rebuild
+npm run verify    # typecheck + lint + tests
 ```
 
 ---
@@ -726,14 +686,11 @@ jsdom silently drops `clientX` and every drag test reads position zero).
 ## Project layout
 
 ```
+install.bat / install.sh   Install dependencies
+build.bat   / build.sh     Typecheck + build to ./dist
+start.bat   / start.sh     Build, serve, open the browser (Ctrl+C to stop)
 docs/
   images/                 Banner, screenshots, social preview, icon
-scripts/
-  common.sh              Node check, port probing, server state
-  install.sh             Dependency install
-  start.sh               Build + serve, detached, with a health wait
-  stop.sh                Shut down by recorded pid, port as fallback
-  run.mjs                npm run app:* dispatcher
 src/
   types.ts                 Shared domain types
   main.tsx                 Entry point
@@ -783,13 +740,14 @@ src/
 
 | Script | Purpose |
 |---|---|
-| `./scripts/install.sh` / `npm run app:install` | Install dependencies |
-| `./scripts/start.sh` / `npm run app:start` | Build and serve, detached |
-| `./scripts/stop.sh` / `npm run app:stop` | Stop the server |
+| `install.bat` / `install.sh` | Install dependencies (`npm install`) |
+| `build.bat` / `build.sh` | Typecheck and build to `./dist` (`npm run build`) |
+| `start.bat` / `start.sh` | Build, then serve and open the browser, foreground (`npm start`) |
+| `npm start` | Same as `start.bat` / `start.sh` |
 | `npm run dev` | Dev server with hot reload |
 | `npm run build` | Typecheck, then bundle to `./dist` |
-| `npm run preview` | Serve the built bundle |
-| `npm run serve` | Serve `./dist` on port 4173 |
+| `npm run preview` | Serve the built bundle (whatever port Vite picks) |
+| `npm run serve` | Serve `./dist` on the fixed port 4173 |
 | `npm test` | Run all tests once |
 | `npm run test:watch` | Tests in watch mode |
 | `npm run coverage` | Coverage report |
@@ -801,16 +759,21 @@ src/
 
 ## Troubleshooting
 
-**`start` says the port is already in use.** Something else has 4173. Run
-`./scripts/stop.sh`, or start elsewhere with `--port 8080`.
+**`start` says the port is already in use.** Something else already has 4173 —
+often an earlier `start` you forgot was running in another terminal. Switch to
+that terminal and press Ctrl+C, or run `npm run serve -- --port 8080` for a
+different port.
 
 **`start` fails during the build.** That is the typecheck refusing to ship a
-broken bundle — the error above the failure is the real one. `--skip-build` will
-serve the last good `dist/` if you need the app up right now.
+broken bundle — the error printed above the failure is the real one. Run
+`npm run serve` on its own if you need to get the last good `./dist` up
+without rebuilding.
 
-**`stop` says nothing was running but the browser still loads the page.** You are
-looking at a cached tab, or a server started some other way. `./scripts/stop.sh --all`
-releases both the preview and dev ports.
+**Closing the terminal window didn't stop the server.** `start` runs in the
+foreground on purpose — Ctrl+C in that same window is the normal way to stop
+it. If the window is already gone, the server process outlives it; find it
+with `netstat -ano | findstr :4173` (Windows) or `lsof -i :4173` (macOS/Linux)
+and end that process.
 
 **A panel shows "could not be decoded".** The browser has no decoder for that
 codec or container — ProRes, DNxHD, H.265 on some builds, or 10-bit sources.
