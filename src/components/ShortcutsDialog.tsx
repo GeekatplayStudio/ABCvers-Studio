@@ -24,8 +24,9 @@ export const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: 'N', action: 'Toggle name overlays' },
   { keys: 'T', action: 'Toggle render-time boxes' },
   { keys: 'F', action: 'Fullscreen' },
-  { keys: '1 - 6', action: 'Set screens per row' },
-  { keys: '0', action: 'Auto layout' },
+  { keys: 'G', action: 'Switch between row and grid layout' },
+  { keys: '[ / ]', action: 'Smaller / larger panels in a grid' },
+  { keys: '0', action: 'Automatic panel size' },
   { keys: '?', action: 'This panel' },
 ]
 

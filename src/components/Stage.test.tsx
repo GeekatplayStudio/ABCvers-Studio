@@ -31,7 +31,14 @@ function fakeFile(name: string, type = 'video/mp4'): File {
 const initial = useStudio.getState()
 
 beforeEach(() => {
-  useStudio.setState({ ...initial, items: [], aspect: 'free', columns: 'auto', fitMode: 'fit' })
+  useStudio.setState({
+    ...initial,
+    items: [],
+    aspect: 'free',
+    columns: 'auto',
+    layout: 'row',
+    fitMode: 'fit',
+  })
   vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`)
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
 })
@@ -137,8 +144,65 @@ describe('Stage geometry', () => {
     expect(document.querySelectorAll('.row')).toHaveLength(2)
     const heights = stages().map((element) => Number.parseFloat(element.style.height))
     expect(new Set(heights).size).toBe(1)
-    // Each row gets half the stage; the pictures are width-constrained here.
-    expect(heights[0]).toBe(337)
+    // Each row gets half the stage; the pictures are width-constrained here,
+    // and a width-constrained row is not rounded down - that would leave a
+    // sliver of background showing down the side of a row meant to reach both
+    // edges.
+    expect(heights[0]).toBe(337.5)
+    restore()
+  })
+
+  it('keeps every panel on one line in row layout, however many there are', () => {
+    const restore = withStageBox(1200, 700)
+    seed(Array.from({ length: 6 }, () => [1920, 1080] as [number, number]))
+    render(<Stage />)
+    expect(document.querySelectorAll('.row')).toHaveLength(1)
+    restore()
+  })
+
+  it('wraps into a squared-off block in grid layout', () => {
+    const restore = withStageBox(1200, 700)
+    useStudio.setState({ layout: 'grid' })
+    seed(Array.from({ length: 6 }, () => [1920, 1080] as [number, number]))
+    render(<Stage />)
+
+    // Six 16:9 panels -> three columns, two rows.
+    expect(document.querySelectorAll('.row')).toHaveLength(2)
+    expect(widths()).toHaveLength(6)
+    // Each panel is far taller than the same six squeezed onto a single line
+    // would be (1200/6 wide, i.e. 112px tall) - that is the point of the mode.
+    const heights = stages().map((element) => Number.parseFloat(element.style.height))
+    expect(new Set(heights).size).toBe(1)
+    expect(heights[0]).toBe(225) // (1200 / 3) / (16/9)
+    restore()
+  })
+
+  it('fills the stage width in grid layout, leaving nothing black down the sides', () => {
+    const restore = withStageBox(1200, 700)
+    useStudio.setState({ layout: 'grid' })
+    seed(Array.from({ length: 9 }, () => [1920, 1080] as [number, number]))
+    render(<Stage />)
+
+    // The column count is measured against the stage, not guessed from the
+    // panel count: whatever it picks, a full row reaches both edges.
+    const perRow = 9 / document.querySelectorAll('.row').length
+    const rowWidth = widths()
+      .slice(0, perRow)
+      .reduce((sum, width) => sum + width, 0)
+    expect(rowWidth).toBe(1200)
+    restore()
+  })
+
+  it('does not let a short final grid row blow its panels up bigger than the rest', () => {
+    const restore = withStageBox(1200, 700)
+    useStudio.setState({ layout: 'grid' })
+    seed(Array.from({ length: 5 }, () => [1920, 1080] as [number, number]))
+    render(<Stage />)
+
+    // Three columns, so the last row holds two panels - and they must match
+    // the three above them rather than justify across the whole stage.
+    expect(document.querySelectorAll('.row')).toHaveLength(2)
+    expect(new Set(widths()).size).toBe(1)
     restore()
   })
 

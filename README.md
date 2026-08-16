@@ -66,7 +66,7 @@ Everything runs locally in your browser. **No file is ever uploaded anywhere.**
 
 | | |
 |---|---|
-| **1–12 panels, always one row** | Any mix of videos and stills, side by side, edge to edge - Auto never wraps into a grid, however many panels are open. |
+| **1–12 panels, row or grid** | Any mix of videos and stills, side by side, edge to edge. One row by default, however many are open - never wrapped behind your back. Toggle to a grid (`G`) when a row has grown too narrow to judge, then one slider sizes the panels - no shape presets, and every full row spans the stage with nothing black down the sides. |
 | **Render time notes** | A large, editable black box on every panel at once (`T`) for noting how long each one took to render - your note, not a measurement. |
 | **Frame-accurate sync** | One transport drives every clip. Drift is corrected continuously. Loops by default. |
 | **Frame by frame, either way** | Single and ten-frame jogs from the footer, from any panel, or from the keyboard. |
@@ -198,12 +198,47 @@ the session with **Clear**. Reorder panels with the **‹** and **›** buttons.
 
 ### Layout and aspect ratio
 
-**Screens** picks how many panels sit in a row: `Auto`, or 1–6. `Auto` keeps
-**every** panel in a single row, however many there are — a comparison is
-between all of them at once, so wrapping into a grid would put some of what
-you're comparing out of the same glance as the rest. More panels means
-narrower ones, never a second row. Pick an explicit number instead if you
-*want* a grid — `3` with seven panels open wraps into rows of three.
+**Layout** switches between the two arrangements, and `G` toggles it from the
+keyboard:
+
+- **Row** — every panel on a single line, however many there are. A comparison
+  is between all of them at once, so wrapping behind your back would put some of
+  what you're comparing out of the same glance as the rest. More panels means
+  narrower ones, never a second row. The default.
+- **Grid** — the panels wrap, and **every full row spans the whole stage**.
+  This is the escape hatch for when a row stops paying: eight clips on one line
+  are slivers, and wrapping them hands each panel back most of its height. A
+  short final row keeps its panels the same size as the rows above rather than
+  stretching them — the slack sits at the end of that row, the way a photo grid
+  leaves its last shelf part-filled.
+
+There are **no shape presets** — no `3 × 3`, no `4 × 2`. In grid mode the
+toggle is followed by one **size slider**: drag right and the panels get bigger,
+which means fewer fit on a line and the grid reflows to suit. Small square at
+one end, large at the other, no number anywhere. `[` and `]` are the keyboard
+twins, and `0` returns to automatic.
+
+The slider stops at the largest panels whose rows still span the stage, and that
+stop is the point of the whole design:
+
+- **Column counts are measured against the real window**, not guessed from the
+  panel count. How many panels fit across depends on the shape of the window as
+  much as on how many are open — nine 16:9 clips want four columns on a wide
+  short screen and three on a tall one — so anything of the `ceil(sqrt(n))`
+  family is wrong half the time, and wrong in a way you can see.
+- **Every position on the slider fills the width.** Too few columns and each
+  row runs out of height before it runs out of width, so the pictures shrink to
+  fit the height and leave black bars down both sides. That is what the stop
+  prevents.
+- **There is nothing beyond the stop worth reaching.** Panel size is not
+  monotonic in column count: past that point the extra row has to come out of
+  the same height, so fewer columns means *smaller* panels, less of the stage
+  covered, and the bars as well. So the track simply ends there.
+- A size you chose is a preference **bounded by what the window can show**.
+  Shrink the window and a count that used to span it no longer does, so it is
+  clamped; widen it again and your choice comes back.
+
+Going back to **Row** clears the panel size, since it means nothing on one line.
 
 **Aspect** controls the shape of every panel:
 
@@ -211,6 +246,13 @@ narrower ones, never a second row. Pick an explicit number instead if you
 - **16:9 / 9:16 / 1:1 / 4:3 / 3:4 / 21:9 / 2.39:1** — every panel is forced to
   the same frame shape, without distorting the picture. This is the mode for
   judging framing across differently shot sources.
+
+It is a menu rather than a row of buttons: eight mutually exclusive ratios, seven
+of which are set once and left alone, were the widest block in the toolbar. Both
+menus are the app's own dropdown, not a native `<select>` — a `select` draws its
+control and its option sheet from the OS, which in a near-black toolbar reads as
+a piece of some other application. Closed, a dropdown is one of the toolbar's own
+buttons; open, it is the same popover the pen palette uses.
 
 **Fit / Fill** decides what happens when a panel is *not* the same shape as the
 picture inside it — which only occurs under an aspect lock, or after you have
@@ -440,8 +482,9 @@ localStorage or server behind it.
 | `N` | Toggle name overlays |
 | `T` | Toggle render-time boxes |
 | `F` | Fullscreen |
-| `1` … `6` | Screens per row |
-| `0` | Auto layout |
+| `G` | Row / grid layout |
+| `[` / `]` | Smaller / larger panels in a grid |
+| `0` | Automatic panel size |
 | `?` | Shortcut reference |
 
 Shortcuts stand down automatically while a slider or a text field has focus.
@@ -614,6 +657,15 @@ picture's shape. That is the whole mechanism behind edge-to-edge alignment, and
 it is asserted both as arithmetic (`layout.test.ts`) and against the real DOM
 geometry the components emit (`Stage.test.tsx`).
 
+Which of the two terms wins decides whether a row can leave black at its sides,
+and it is also what picks the grid: `bestFitColumns` walks the column counts and
+takes the first whose `rowWidth / Σ weights` is a height the row can afford.
+Below that count the height term wins, the pictures shrink to fit it, and the
+row no longer reaches both edges. A width-constrained row is also the one case
+where H is *not* rounded down — flooring it would cost `Σ weights` pixels of
+width, which is a visible sliver of background beside a row that is supposed to
+span the stage.
+
 Info strips are measured with a `ResizeObserver` rather than assumed, because a
 narrow panel wraps its metadata onto more lines; the row reserves the tallest
 strip so one panel cannot push the pictures out of alignment. A splitter drag
@@ -745,14 +797,16 @@ logic that is hard to eyeball:
 | `lib/guards.test.ts` | Classification by MIME and by extension (including EXR/DNG), size and emptiness rejection, numeric coercion, `NaN` handling, image-decoder routing. |
 | `lib/format.test.ts` | Byte scaling, clock and SMPTE timecode (including the floating-point edges that make `62.48` print `.479`), duration, aspect reduction, middle truncation. |
 | `lib/media.test.ts` | File intake and EXR/DNG decoder routing, panel limit accounting, object-URL failures, frame-rate median and broadcast-rate snapping, aspect fallbacks, the priming probe itself (real samples, exact restoration, normal speed, autoplay-refused fallback, never two clips at once), and the `loadExr`/`loadDngPreview` fetch-to-decode orchestration against the same real fixtures. |
-| `lib/layout.test.ts` | Auto columns, row chunking, aspect-derived weights, splitter conservation, and `fitRow`: shared height, integer edges, height- vs width-constrained rows, strip reservation, no overflow, and the footer-reservation cap that stops a tall info strip from shrinking a panel's picture without bound. |
+| `lib/layout.test.ts` | Auto columns in both row and grid layout (and that an explicit count outranks either); `bestFitColumns` against a measured stage - the fewest columns that still span it, more of them on a short window than a tall one, the invariant that every count it returns fills the width rather than the height, the info strips being reserved before it decides, and safety before anything is measured; row chunking, aspect-derived weights, splitter conservation, and `fitRow`: shared height, integer edges, height- vs width-constrained rows, strip reservation, no overflow, and the footer-reservation cap that stops a tall info strip from shrinking a panel's picture without bound. |
 | `lib/draw.test.ts` | Pen colours (contents, uniqueness, default), point distance, freehand-smoothing maths (empty/single-point/multi-point/deterministic), coordinate scaling, stroke-id uniqueness, and the guardrail constants. |
-| `components/Stage.test.tsx` | The edge-to-edge guarantee against the real DOM: a 16:9 and a 1:1 panel come out 768x432 and 432x432 sharing one height, widths summing to the full row; mixed orientations keep integer edges; locked aspect gives identical boxes; short rows are height-constrained; multi-row splitting. |
+| `components/Stage.test.tsx` | The edge-to-edge guarantee against the real DOM: a 16:9 and a 1:1 panel come out 768x432 and 432x432 sharing one height, widths summing to the full row; mixed orientations keep integer edges; locked aspect gives identical boxes; short rows are height-constrained; multi-row splitting; and the row/grid layout modes - six panels stay on one line in row layout, wrap in grid layout, a full grid row spans the stage exactly (nothing black down the sides), and a short final grid row does not blow its panels up bigger than the rows above. |
 | `components/DrawingLayer.test.tsx` | Inert (no drag recorded) with the pen off, active with it on; a drag commits a stroke in the current colour at the correct normalized coordinates; near-duplicate points are thinned; a click with no movement still leaves a one-point dot; right-button drags are ignored; every persisted stroke renders; the native context menu is suppressed only while the pen is active. |
+| `components/GridSizeControl.test.tsx` | The panel-size slider: it runs small-to-large from one line to the largest grid that still spans the stage, stops there rather than carrying on into smaller panels and black bars, shows no numbers at all, drags and arrow-nudges one step at a time with clamping at both ends, Home/End reach the extremes, and it is inert when only one arrangement ever fills the stage. |
+| `components/Dropdown.test.tsx` | The dropdown itself: closed until asked, opens and selects and closes by click, marks the current value, opens on the arrow keys and walks from the selected row with clamping at both ends plus Home/End, Escape closes without choosing and hands focus back, an outside click closes it *but the click that opened it does not*, a page scroll closes it (it is placed by screen coordinates), and it cannot be opened while disabled. |
 | `components/PenColorPicker.test.tsx` | Every configured colour listed, the current one marked checked, selecting one closes the popover, Escape/outside-click/scroll/resize all close it, and the same click that opened it does not immediately close it again. |
-| `store/useStudio.test.ts` | Add/remove/reorder, URL revocation, metadata, zoom state, the volume/mute/solo matrix, layout state, toasts, and the drawing state: strokes append in order, retire past the 300-stroke cap, clear individually or via `clearAll()`, and pen/zoom mode are mutually exclusive. |
+| `store/useStudio.test.ts` | Add/remove/reorder, URL revocation, metadata, zoom state, the volume/mute/solo matrix, layout state (row/grid toggling, a fixed column count implying a grid, and that count being dropped on the way back to a row), toasts, and the drawing state: strokes append in order, retire past the 300-stroke cap, clear individually or via `clearAll()`, and pen/zoom mode are mutually exclusive. |
 | `components/*.test.tsx` | Scrubber, volume and exposure pointer/keyboard interaction and ARIA; media info rendering for video, stills, EXR, DNG, loading and error states; the render-time overlay's value binding and that it stops its own pointer events from reaching the marquee/pan layer underneath it. |
-| `App.test.tsx` | Whole-shell integration: rendering panels, closing, reordering, layout, aspect and fit controls, zoom controls, rejection toasts, loop default, both coffee links, frame stepping from the footer and from panels, the render-time boxes (hidden by default, values survive hiding, gone when the panel closes, and typing a "t" while entering one doesn't toggle them away mid-word), drawing across panels and clearing it, the pen colour picker, pen/zoom mode exclusivity, and every keyboard shortcut. |
+| `App.test.tsx` | Whole-shell integration: rendering panels, closing, reordering, the row/grid toggle and the panel-size slider end to end (including that the slider only exists once there is a grid to size, that it stops at the largest grid which still spans the stage, and that leaving grid mode drops the size), aspect and fit controls, zoom controls, rejection toasts, loop default, both coffee links, frame stepping from the footer and from panels, the render-time boxes (hidden by default, values survive hiding, gone when the panel closes, and typing a "t" while entering one doesn't toggle them away mid-word), drawing across panels and clearing it, the pen colour picker, pen/zoom mode exclusivity, and every keyboard shortcut. |
 
 `src/test/setup.ts` fills the jsdom gaps — media playback, object URLs,
 `ResizeObserver`, pointer capture, and a `PointerEvent` polyfill (without which
@@ -775,7 +829,7 @@ src/
   lib/
     sync.ts                SyncEngine - one timeline for every clip
     zoom.ts                Normalized zoom rects and transform maths
-    layout.ts              Columns, rows, and the edge-to-edge row fit
+    layout.ts              Row/grid columns and the edge-to-edge row fit
     media.ts               File intake, metadata probing, fps measurement
     exr.ts                 From-scratch OpenEXR scanline decoder + tonemap
     dng.ts                 TIFF/DNG embedded-preview extraction
@@ -792,7 +846,9 @@ src/
     useShortcuts.ts        Keyboard map
     useSyncTime.ts         Render-free playhead subscription
   components/
-    Toolbar.tsx            Media, aspect, fit, columns, zoom, view
+    Toolbar.tsx            Media, aspect, fit, layout, zoom, view
+    Dropdown.tsx           The app's own dropdown, portaled clear of the bar
+    GridSizeControl.tsx    Panel size in a grid, as one slider
     Stage.tsx              Rows, justified panel geometry, splitters
     MediaPanel.tsx         One screen: media, tools, scrubber, volume, info
     MediaSurface.tsx       Content box, zoom transform, marquee and pan

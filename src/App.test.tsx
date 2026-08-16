@@ -26,6 +26,7 @@ beforeEach(() => {
     zoomMode: false,
     toasts: [],
     columns: 'auto',
+    layout: 'row',
     aspect: 'free',
     fitMode: 'fit',
     strokes: [],
@@ -99,18 +100,66 @@ describe('ABCvers Studio shell', () => {
     expect(useStudio.getState().items.map((i) => i.renderTime)).toEqual([''])
   })
 
-  it('lays panels out in rows of the chosen column count', () => {
+  it('switches between row and grid layout', () => {
     render(<App />)
     addMedia(...Array.from({ length: 6 }, (_, i) => fakeFile(`c${i}.mp4`)))
-    fireEvent.click(screen.getByRole('button', { name: '2' }))
-    expect(useStudio.getState().columns).toBe(2)
-    expect(document.querySelectorAll('.row')).toHaveLength(3)
+    expect(document.querySelectorAll('.row')).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Grid' }))
+    expect(useStudio.getState().layout).toBe('grid')
+    expect(document.querySelectorAll('.row')).toHaveLength(2) // 3 x 2
+
+    fireEvent.click(screen.getByRole('button', { name: 'Row' }))
+    expect(document.querySelectorAll('.row')).toHaveLength(1)
+  })
+
+  it('sizes the grid from one slider, with no shape presets anywhere', () => {
+    render(<App />)
+    addMedia(...Array.from({ length: 6 }, (_, i) => fakeFile(`c${i}.mp4`)))
+
+    // The control only exists once there is a grid to size.
+    expect(screen.queryByRole('slider', { name: 'Panel size' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Grid' }))
+
+    const size = screen.getByRole('slider', { name: 'Panel size' })
+    expect(size).toHaveAttribute('aria-valuetext', '3 screens per row')
+
+    // Left is smaller panels, so more of them fit on a line.
+    fireEvent.keyDown(size, { key: 'ArrowLeft' })
+    expect(useStudio.getState().columns).toBe(4)
+    expect(document.querySelectorAll('.row')).toHaveLength(2)
+
+    // Home is the smallest of all: every panel back on one line.
+    fireEvent.keyDown(size, { key: 'Home' })
+    expect(useStudio.getState().columns).toBe(6)
+    expect(document.querySelectorAll('.row')).toHaveLength(1)
+
+    // Right is bigger panels, and it stops at the largest that still spans
+    // the stage rather than carrying on into black bars.
+    fireEvent.keyDown(size, { key: 'End' })
+    expect(useStudio.getState().columns).toBe(3)
+    fireEvent.keyDown(size, { key: 'ArrowRight' })
+    expect(useStudio.getState().columns).toBe(3)
+    expect(document.querySelectorAll('.row')).toHaveLength(2)
+  })
+
+  it('going back to a row drops the grid size, so the toggle never lies', () => {
+    render(<App />)
+    addMedia(...Array.from({ length: 6 }, (_, i) => fakeFile(`c${i}.mp4`)))
+    fireEvent.click(screen.getByRole('button', { name: 'Grid' }))
+    fireEvent.keyDown(screen.getByRole('slider', { name: 'Panel size' }), { key: 'ArrowLeft' })
+    expect(useStudio.getState().columns).toBe(4)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Row' }))
+    expect(useStudio.getState().columns).toBe('auto')
+    expect(document.querySelectorAll('.row')).toHaveLength(1)
   })
 
   it('locks every panel to a chosen aspect ratio', () => {
     render(<App />)
     addMedia(fakeFile('a.mp4'))
-    fireEvent.click(screen.getByRole('button', { name: '1:1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Aspect ratio' }))
+    fireEvent.click(screen.getByRole('option', { name: '1:1' }))
     expect(useStudio.getState().aspect).toBe('1:1')
     expect((document.querySelector('.stage') as HTMLElement).dataset.locked).toBe('true')
   })
@@ -320,12 +369,29 @@ describe('keyboard shortcuts', () => {
     expect(useStudio.getState().drawMode).toBe(false)
   })
 
-  it('number keys set the column count', () => {
+  it('bracket keys step panel size, which means a grid', () => {
     render(<App />)
-    fireEvent.keyDown(window, { key: '3' })
-    expect(useStudio.getState().columns).toBe(3)
+    addMedia(...Array.from({ length: 6 }, (_, i) => fakeFile(`c${i}.mp4`)))
+
+    // Smaller panels: more of them per row, and a grid to put them in.
+    fireEvent.keyDown(window, { key: '[' })
+    expect(useStudio.getState().layout).toBe('grid')
+    expect(useStudio.getState().columns).toBe(6)
+
+    fireEvent.keyDown(window, { key: ']' })
+    expect(useStudio.getState().columns).toBe(5)
+
     fireEvent.keyDown(window, { key: '0' })
     expect(useStudio.getState().columns).toBe('auto')
+  })
+
+  it('G toggles row and grid layout', () => {
+    render(<App />)
+    expect(useStudio.getState().layout).toBe('row')
+    fireEvent.keyDown(window, { key: 'g' })
+    expect(useStudio.getState().layout).toBe('grid')
+    fireEvent.keyDown(window, { key: 'g' })
+    expect(useStudio.getState().layout).toBe('row')
   })
 
   it('stands down while a slider has focus', () => {

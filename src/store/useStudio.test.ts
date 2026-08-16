@@ -22,6 +22,7 @@ beforeEach(() => {
     aspect: 'free',
     fitMode: 'fit',
     columns: 'auto',
+    layout: 'row',
     showRenderTime: false,
     strokes: [],
     drawMode: false,
@@ -222,6 +223,43 @@ describe('layout state', () => {
     useStudio.getState().setColumns(99)
     expect(useStudio.getState().columns).toBe(MAX_PANELS)
     useStudio.getState().setColumns('auto')
+    expect(useStudio.getState().columns).toBe('auto')
+  })
+
+  it('toggles between row and grid', () => {
+    expect(useStudio.getState().layout).toBe('row')
+    useStudio.getState().toggleLayout()
+    expect(useStudio.getState().layout).toBe('grid')
+    useStudio.getState().toggleLayout()
+    expect(useStudio.getState().layout).toBe('row')
+    useStudio.getState().setLayout('grid')
+    expect(useStudio.getState().layout).toBe('grid')
+  })
+
+  it('treats a fixed column count as a grid, and keeps it while the grid lasts', () => {
+    // Two screens per row *is* a grid; leaving the toggle on "Row" while the
+    // stage is visibly wrapped would make it a lie.
+    useStudio.getState().setColumns(2)
+    expect(useStudio.getState().layout).toBe('grid')
+    useStudio.getState().setLayout('grid')
+    expect(useStudio.getState().columns).toBe(2)
+  })
+
+  it('drops the grid size on the way back to a row, where it means nothing', () => {
+    useStudio.getState().setColumns(3)
+    useStudio.getState().setLayout('row')
+    expect(useStudio.getState().columns).toBe('auto')
+
+    useStudio.getState().setColumns(3)
+    useStudio.getState().toggleLayout()
+    expect(useStudio.getState().layout).toBe('row')
+    expect(useStudio.getState().columns).toBe('auto')
+  })
+
+  it('leaves the layout alone for auto columns, which suits either mode', () => {
+    useStudio.getState().setLayout('grid')
+    useStudio.getState().setColumns('auto')
+    expect(useStudio.getState().layout).toBe('grid')
     expect(useStudio.getState().columns).toBe('auto')
   })
 

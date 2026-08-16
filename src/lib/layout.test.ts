@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   autoColumns,
+  bestFitColumns,
   chunkRows,
   fitRow,
   panelAspect,
@@ -43,11 +44,72 @@ describe('columns', () => {
     expect(autoColumns(0)).toBe(1)
   })
 
+  it('squares the panels off in grid layout', () => {
+    expect(autoColumns(1, 'grid')).toBe(1)
+    expect(autoColumns(2, 'grid')).toBe(2) // 2x1
+    expect(autoColumns(4, 'grid')).toBe(2) // 2x2
+    expect(autoColumns(5, 'grid')).toBe(3) // 3 + 2
+    expect(autoColumns(6, 'grid')).toBe(3) // 3x2
+    expect(autoColumns(9, 'grid')).toBe(3) // 3x3
+    expect(autoColumns(12, 'grid')).toBe(4) // 4x3
+    expect(autoColumns(0, 'grid')).toBe(1)
+  })
+
   it('never asks for more columns than there are panels', () => {
     expect(resolveColumns(2, 6)).toBe(2)
     expect(resolveColumns(6, 3)).toBe(3)
     expect(resolveColumns(5, 'auto')).toBe(5)
     expect(resolveColumns(0, 4)).toBe(1)
+  })
+
+  it('follows the layout mode only when the column count is automatic', () => {
+    expect(resolveColumns(6, 'auto', 'row')).toBe(6)
+    expect(resolveColumns(6, 'auto', 'grid')).toBe(3)
+    // An explicit count is the user's own decision - it outranks either mode.
+    expect(resolveColumns(6, 2, 'row')).toBe(2)
+    expect(resolveColumns(6, 5, 'grid')).toBe(5)
+  })
+})
+
+describe('bestFitColumns', () => {
+  const wide = Array.from({ length: 9 }, () => 16 / 9)
+
+  it('picks the fewest columns whose grid still fills the width', () => {
+    // Nine 16:9 panels on a 1280x606 stage. Three across is the squarest
+    // arrangement, but it needs 426x240 pictures to fill the width and only
+    // 202 of height per row is available - so it would shrink to 359 wide and
+    // leave ~200px of black split down both sides. Four across fits exactly.
+    expect(bestFitColumns(wide, { width: 1280, height: 606 })).toBe(4)
+  })
+
+  it('gives a tall window fewer, larger columns than a short one', () => {
+    expect(bestFitColumns(wide, { width: 1280, height: 1400 })).toBe(3)
+    expect(bestFitColumns(wide, { width: 1280, height: 300 })).toBe(5)
+  })
+
+  it('every column count it returns fills the width rather than the height', () => {
+    for (const height of [280, 400, 606, 900, 1400]) {
+      const box = { width: 1280, height }
+      const columns = bestFitColumns(wide, box)
+      const rows = Math.ceil(wide.length / columns)
+      const fit = fitRow(wide.slice(0, columns), { width: box.width, height: box.height / rows })
+      const rowWidth = fit.widths.reduce((sum, width) => sum + width, 0)
+      expect(rowWidth).toBe(box.width) // no black down either side
+    }
+  })
+
+  it('reserves the info strips before deciding, so they cannot bring the bars back', () => {
+    const box = { width: 1280, height: 606 }
+    expect(bestFitColumns(wide, box, 0)).toBe(4)
+    // Strips eat height, which is exactly what forces smaller, more numerous
+    // panels - the alternative is a row that no longer reaches both edges.
+    expect(bestFitColumns(wide, box, 60)).toBe(5)
+  })
+
+  it('is safe before the stage has been measured, and with one panel', () => {
+    expect(bestFitColumns(wide, { width: 0, height: 0 })).toBe(9)
+    expect(bestFitColumns([16 / 9], { width: 1280, height: 606 })).toBe(1)
+    expect(bestFitColumns([], { width: 1280, height: 606 })).toBe(1)
   })
 })
 

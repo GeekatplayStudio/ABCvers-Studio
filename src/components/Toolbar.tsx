@@ -5,20 +5,52 @@ import { ACCEPT_ATTRIBUTE, MAX_PANELS } from '../lib/guards'
 import { zoomFactor } from '../lib/zoom'
 import {
   FullscreenIcon,
+  GridIcon,
   HelpIcon,
   InfoIcon,
   PenIcon,
   PlusIcon,
   ResetIcon,
+  RowIcon,
   StopwatchIcon,
   TrashIcon,
   ZoomIcon,
 } from './Icons'
 import { CoffeeLink } from './CoffeeLink'
+import { Dropdown, type DropdownOption } from './Dropdown'
+import { GridSizeControl } from './GridSizeControl'
 import { PenColorPicker } from './PenColorPicker'
-import type { AspectKey, FitMode } from '../types'
+import type { AspectKey, FitMode, LayoutMode } from '../types'
 
-const COLUMN_OPTIONS: (number | 'auto')[] = ['auto', 1, 2, 3, 4, 5, 6]
+const ASPECT_RATIO_OPTIONS: DropdownOption<AspectKey>[] = ASPECT_OPTIONS.map((option) => ({
+  value: option.key,
+  label: option.label,
+  hint: option.key === 'free' ? 'Own ratio' : undefined,
+  title:
+    option.key === 'free'
+      ? 'Each panel follows its own media ratio'
+      : `Lock every panel to ${option.label}`,
+}))
+
+const LAYOUT_OPTIONS: {
+  key: LayoutMode
+  label: string
+  title: string
+  Icon: typeof RowIcon
+}[] = [
+  {
+    key: 'row',
+    label: 'Row',
+    title: 'Keep every panel side by side on one line (G)',
+    Icon: RowIcon,
+  },
+  {
+    key: 'grid',
+    label: 'Grid',
+    title: 'Wrap the panels into a grid so each one keeps more height (G)',
+    Icon: GridIcon,
+  },
+]
 
 export function Toolbar({ onHelp }: { onHelp: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -26,7 +58,9 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
   const items = useStudio((state) => state.items)
   const aspect = useStudio((state) => state.aspect)
   const fitMode = useStudio((state) => state.fitMode)
-  const columns = useStudio((state) => state.columns)
+  const layout = useStudio((state) => state.layout)
+  const resolvedColumns = useStudio((state) => state.resolvedColumns)
+  const fitColumns = useStudio((state) => state.fitColumns)
   const zoom = useStudio((state) => state.zoom)
   const zoomMode = useStudio((state) => state.zoomMode)
   const showInfo = useStudio((state) => state.showInfo)
@@ -38,6 +72,7 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
   const clearAll = useStudio((state) => state.clearAll)
   const setAspect = useStudio((state) => state.setAspect)
   const setFitMode = useStudio((state) => state.setFitMode)
+  const setLayout = useStudio((state) => state.setLayout)
   const setColumns = useStudio((state) => state.setColumns)
   const toggleZoomMode = useStudio((state) => state.toggleZoomMode)
   const resetZoom = useStudio((state) => state.resetZoom)
@@ -116,27 +151,24 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
         </span>
       </div>
 
-      <div className="toolbar__group" role="group" aria-label="Aspect ratio">
+      {/* Aspect and fit are one decision - the shape of a panel and what the
+          picture does inside that shape - so they share a group and a label. */}
+      <div className="toolbar__group" aria-label="Panel shape">
         <span className="toolbar__label">Aspect</span>
-        <div className="segmented">
-          {ASPECT_OPTIONS.map((option) => (
-            <button
-              key={option.key}
-              type="button"
-              className="segmented__item"
-              aria-pressed={aspect === option.key}
-              onClick={() => setAspect(option.key as AspectKey)}
-              title={option.key === 'free' ? 'Each panel follows its own media ratio' : `Lock every panel to ${option.label}`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
+        {/* Eight mutually exclusive ratios as eight buttons was the widest
+            block in the toolbar, and seven of them are set once and left. A
+            menu costs one click and gives back most of that width. */}
+        <Dropdown
+          label="Aspect ratio"
+          title="Free follows each panel's own media ratio; anything else locks every panel to that shape"
+          value={aspect}
+          options={ASPECT_RATIO_OPTIONS}
+          onChange={setAspect}
+          width={68}
+          testId="aspect"
+        />
 
-      <div className="toolbar__group" role="group" aria-label="Picture fit">
-        <span className="toolbar__label">Fit</span>
-        <div className="segmented">
+        <div className="segmented" role="group" aria-label="Picture fit">
           {(['fit', 'fill'] as FitMode[]).map((mode) => (
             <button
               key={mode}
@@ -156,54 +188,75 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
         </div>
       </div>
 
-      <div className="toolbar__group" role="group" aria-label="Columns">
-        <span className="toolbar__label">Screens</span>
-        <div className="segmented">
-          {COLUMN_OPTIONS.map((option) => (
+      {/* Layout and grid size are one group: the row/grid choice, and - only
+          when it can do anything - how wide that grid is. The slider replaced a
+          seven-button Auto/1-6 strip, which is most of what this toolbar has
+          bought back in width. */}
+      <div className="toolbar__group" aria-label="Panel layout">
+        <span className="toolbar__label">Layout</span>
+        <div className="segmented" role="group" aria-label="Row or grid">
+          {LAYOUT_OPTIONS.map(({ key, label, title, Icon }) => (
             <button
-              key={String(option)}
+              key={key}
               type="button"
-              className="segmented__item"
-              aria-pressed={columns === option}
-              onClick={() => setColumns(option)}
-              title={option === 'auto' ? 'Choose the column count automatically' : `${option} per row`}
+              className="segmented__item segmented__item--icon"
+              aria-pressed={layout === key}
+              onClick={() => setLayout(key)}
+              disabled={items.length === 0}
+              title={title}
             >
-              {option === 'auto' ? 'Auto' : option}
+              <Icon size={14} />
+              {label}
             </button>
           ))}
         </div>
+        {layout === 'grid' && (
+          <GridSizeControl
+            columns={resolvedColumns}
+            count={items.length}
+            fitColumns={fitColumns}
+            onColumns={setColumns}
+          />
+        )}
       </div>
 
+      {/* Every control in this group is a view toggle, so they are all
+          icon-only - a couple of them carrying words made the row read as two
+          different kinds of control and cost most of a hundred pixels. */}
       <div className="toolbar__group toolbar__group--end">
         <button
           type="button"
-          className="btn"
+          className="btn btn--icon"
           aria-pressed={zoomMode}
           onClick={toggleZoomMode}
           disabled={items.length === 0}
-          title="Draw a marquee to magnify that area in every panel (Z)"
+          title="Zoom: draw a marquee to magnify that area in every panel (Z)"
+          aria-label="Zoom marquee mode"
         >
           <ZoomIcon size={15} />
-          Zoom
         </button>
-        <span className="counter" title="Current magnification">
-          {magnification.toFixed(1)}x
-        </span>
+        {/* 1.0x is the resting state and says nothing; only a real
+            magnification is worth the width. */}
+        {magnification !== 1 && (
+          <span className="counter" title="Current magnification">
+            {magnification.toFixed(1)}x
+          </span>
+        )}
         <button
           type="button"
-          className="btn"
+          className="btn btn--icon"
           onClick={resetZoom}
           disabled={magnification === 1}
           title="Reset to original framing (R)"
+          aria-label="Reset zoom"
         >
           <ResetIcon size={15} />
-          Reset
         </button>
         <div className="pen-anchor">
           <button
             ref={penButtonRef}
             type="button"
-            className="btn"
+            className="btn btn--icon"
             aria-pressed={drawMode}
             onClick={toggleDrawMode}
             onContextMenu={(event) => {
@@ -211,11 +264,11 @@ export function Toolbar({ onHelp }: { onHelp: () => void }) {
               setColorPickerOpen(true)
             }}
             disabled={items.length === 0}
-            title="Draw over any panel to point something out (P) - right-click for colour"
+            title="Pen: draw over any panel to point something out (P) - right-click for colour"
+            aria-label="Pen"
             style={{ '--pen-color': drawColor } as React.CSSProperties}
           >
             <PenIcon size={15} />
-            Pen
             <span className="pen-swatch" aria-hidden="true" />
           </button>
           {colorPickerOpen && (

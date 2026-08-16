@@ -71,6 +71,13 @@ export interface MediaItem {
 /** How a picture fills its panel when the panel is not its own shape. */
 export type FitMode = 'fit' | 'fill'
 
+/**
+ * How panels are arranged on the stage. `row` keeps every panel side by side
+ * on one line; `grid` wraps them into a roughly square block, which buys back
+ * height once a row of many panels has become too narrow to judge.
+ */
+export type LayoutMode = 'row' | 'grid'
+
 /** Aspect ratio lock for every panel. `free` follows each media's own ratio. */
 export type AspectKey = 'free' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | '2.39:1'
 

@@ -88,13 +88,16 @@ button {
 .app {
   display: grid;
   grid-template-rows: var(--h-toolbar) 1fr var(--h-transport);
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
+  width: 100%;
   overflow: hidden;
 }
 
 .app__main {
   position: relative;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
   background: var(--bg-panel);
 }
@@ -151,7 +154,9 @@ button {
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 18px;
+  /* Groups are separated by their own uppercase labels as much as by space,
+     so the gap only has to be legible, not generous. */
+  gap: 14px;
   padding: 0 12px;
   background: linear-gradient(180deg, var(--bg-elev), var(--bg));
   border-bottom: 1px solid var(--line);
@@ -356,6 +361,179 @@ button {
   color: var(--danger);
 }
 
+/* ------------------------------------------------------------ panel size -- */
+
+/* How big the panels in a grid are. Deliberately unlabelled: a small square
+   at one end, a large one at the other, and no number anywhere. */
+.gridsize {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+
+.gridsize__end {
+  flex: none;
+  border-radius: 1.5px;
+  background: var(--text-faint);
+}
+
+.gridsize__end--sm {
+  width: 7px;
+  height: 7px;
+}
+
+.gridsize__end--lg {
+  width: 12px;
+  height: 12px;
+}
+
+.gridsize__track {
+  --knob: 0%;
+  position: relative;
+  width: 72px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.gridsize__track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: #23272e;
+}
+
+.gridsize__fill {
+  position: absolute;
+  left: 0;
+  width: var(--knob);
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text-dim);
+  pointer-events: none;
+}
+
+.gridsize__track:hover .gridsize__fill,
+.gridsize__track:focus-visible .gridsize__fill {
+  background: var(--accent);
+}
+
+.gridsize__knob {
+  position: absolute;
+  left: var(--knob);
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.gridsize__track[aria-disabled='true'] {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------- dropdown -- */
+
+/* Collapsed, a dropdown is one of the toolbar's own buttons - same height,
+   border and hover as `.btn` - so a control that used to be a row of buttons
+   still looks like it belongs to that row. */
+.dropdown {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+
+.dropdown__trigger {
+  justify-content: space-between;
+  gap: 6px;
+  padding-right: 6px;
+  color: var(--text);
+}
+
+/* Dimmed while the chosen option is a consequence rather than a choice - an
+   automatic grid size, for instance. */
+.dropdown__trigger[data-dim] .dropdown__label {
+  color: var(--text-faint);
+}
+
+.dropdown__label {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.dropdown__caret {
+  flex: none;
+  color: var(--text-faint);
+  transition: transform 0.12s ease;
+}
+
+.dropdown__trigger[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+
+.dropdown__trigger[aria-expanded='true'] .dropdown__caret {
+  transform: rotate(180deg);
+}
+
+/* The open list, portaled to the body and placed from the trigger's own
+   screen position - see the comment on `.pen-picker`, which the toolbar's
+   horizontal scrolling clips for exactly the same reason. */
+.dropdown__menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 132px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+  outline: none;
+}
+
+.dropdown__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dropdown__option[data-active] {
+  background: var(--surface-hi);
+  color: var(--text);
+}
+
+.dropdown__option[aria-selected='true'] {
+  color: var(--accent-hi);
+}
+
+.dropdown__hint {
+  font-family: var(--font);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
 .segmented {
   display: flex;
   border: 1px solid var(--line);
@@ -402,6 +580,14 @@ button {
   min-width: 26px;
   padding: 0 6px;
 }
+
+/* An icon sitting beside the label, e.g. the row/grid layout toggle. */
+.segmented__item--icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 
 .counter {
   font-family: var(--mono);
@@ -471,6 +657,12 @@ button {
   justify-content: center;
   height: 100%;
   width: 100%;
+  /* The stage is measured to decide how wide its panels may be, so it must
+     never be widened *by* those panels: a stage that grows to fit a row it
+     just sized would measure larger next pass and never settle after the
+     window is made narrower. */
+  min-width: 0;
+  overflow: hidden;
   gap: 0;
   /* Any slack is pushed outside the rows, never between the panels. */
 }
@@ -489,6 +681,14 @@ button {
 .row[data-measured] {
   flex: 0 1 auto;
   align-items: flex-start;
+}
+
+/* In a grid every full row spans the whole stage, so there is nothing to
+   centre; only a short final row has slack, and it belongs at the end of that
+   row - the way a photo grid leaves its last shelf part-filled - rather than
+   split into two black margins. */
+.stage[data-layout='grid'] .row {
+  justify-content: flex-start;
 }
 
 .row__cell {

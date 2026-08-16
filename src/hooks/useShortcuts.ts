@@ -94,6 +94,9 @@ export function useShortcuts(onHelp: () => void): void {
         case 'p':
           store.toggleDrawMode()
           break
+        case 'g':
+          store.toggleLayout()
+          break
         case 'f':
           if (document.fullscreenElement) void document.exitFullscreen()
           else void document.documentElement.requestFullscreen?.().catch(() => undefined)
@@ -109,11 +112,18 @@ export function useShortcuts(onHelp: () => void): void {
         case '?':
           onHelp()
           break
+        // Panel size, one notch at a time - the keyboard twin of the grid
+        // slider. Bracket keys because every digit-as-column-count binding
+        // this replaced was a shape preset by another name.
+        case '[':
+          store.stepPanelSize(-1)
+          break
+        case ']':
+          store.stepPanelSize(1)
+          break
         case '0':
           store.setColumns('auto')
           break
-        default:
-          if (/^[1-6]$/.test(key)) store.setColumns(Number(key))
       }
     }
 

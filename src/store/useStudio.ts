@@ -7,7 +7,7 @@
  */
 
 import { create } from 'zustand'
-import type { AspectKey, FitMode, MediaItem, MediaMeta, Rect, Stroke } from '../types'
+import type { AspectKey, FitMode, LayoutMode, MediaItem, MediaMeta, Rect, Stroke } from '../types'
 import { intakeFiles, type RejectedFile } from '../lib/media'
 import { clamp, MAX_PANELS, safeExposure, safeVolume } from '../lib/guards'
 import { clampRect, FULL_RECT, isFullRect, zoomRectBy } from '../lib/zoom'
@@ -24,7 +24,16 @@ export interface StudioState {
   items: MediaItem[]
   aspect: AspectKey
   fitMode: FitMode
+  layout: LayoutMode
   columns: number | 'auto'
+  /**
+   * Screens per row the stage actually laid out, and the fewest it can lay out
+   * while every full row still spans the stage. Both depend on the measured
+   * stage, so `Stage` reports them back for the toolbar's size slider to sit
+   * at and to bound itself by. Nothing else should set them.
+   */
+  resolvedColumns: number
+  fitColumns: number
   zoom: Rect | null
   zoomMode: boolean
   globalVolume: number
@@ -49,7 +58,11 @@ export interface StudioState {
 
   setAspect: (aspect: AspectKey) => void
   setFitMode: (mode: FitMode) => void
+  setLayout: (layout: LayoutMode) => void
+  toggleLayout: () => void
   setColumns: (columns: number | 'auto') => void
+  setLaidOutColumns: (resolved: number, fit: number) => void
+  stepPanelSize: (direction: -1 | 1) => void
   resetWidths: () => void
 
   setZoom: (rect: Rect | null) => void
@@ -107,7 +120,10 @@ export const useStudio = create<StudioState>()((set, get) => ({
   items: [],
   aspect: 'free',
   fitMode: 'fit',
+  layout: 'row',
   columns: 'auto',
+  resolvedColumns: 1,
+  fitColumns: 1,
   zoom: null,
   zoomMode: false,
   globalVolume: 1,
@@ -186,8 +202,55 @@ export const useStudio = create<StudioState>()((set, get) => ({
 
   setFitMode: (fitMode) => set({ fitMode }),
 
+  /**
+   * A row is one line by definition, so a fixed column count means nothing
+   * there - going back to `row` drops it. Going the other way keeps whatever
+   * grid size was already chosen.
+   */
+  setLayout: (layout) => set(layout === 'row' ? { layout, columns: 'auto' } : { layout }),
+
+  toggleLayout: () => {
+    const next = get().layout === 'grid' ? 'row' : 'grid'
+    get().setLayout(next)
+  },
+
+  /**
+   * Asking for a fixed number of screens per row *is* asking for a grid, so
+   * this switches the layout with it - the alternative is a stage that is
+   * visibly wrapped while the toggle still claims "Row". `auto` is meaningful
+   * in either mode (one line, or a squared-off block) and leaves it alone.
+   */
   setColumns: (columns) => {
-    set({ columns: columns === 'auto' ? 'auto' : clamp(Math.round(columns), 1, MAX_PANELS) })
+    if (columns === 'auto') {
+      set({ columns: 'auto' })
+      return
+    }
+    set({ columns: clamp(Math.round(columns), 1, MAX_PANELS), layout: 'grid' })
+  },
+
+  setLaidOutColumns: (resolved, fit) => {
+    const resolvedColumns = clamp(Math.round(resolved), 1, MAX_PANELS)
+    const fitColumns = clamp(Math.round(fit), 1, MAX_PANELS)
+    const state = get()
+    // Guarded because the stage reports this on every layout pass: writing the
+    // same numbers back would wake every subscriber for nothing.
+    if (state.resolvedColumns === resolvedColumns && state.fitColumns === fitColumns) return
+    set({ resolvedColumns, fitColumns })
+  },
+
+  /**
+   * One notch of panel size: `1` bigger, `-1` smaller. Bigger stops at the
+   * point where a row would no longer span the stage - past there the panels
+   * start shrinking again anyway, since the extra rows have to share the same
+   * height, so there is nothing on the other side worth reaching.
+   */
+  stepPanelSize: (direction) => {
+    const state = get()
+    const count = state.items.length
+    if (count < 2) return
+    const current = state.layout === 'row' ? count : state.resolvedColumns
+    const next = clamp(current - direction, state.fitColumns, count)
+    get().setColumns(next)
   },
 
   /** Drop every splitter drag and go back to edge-to-edge default widths. */

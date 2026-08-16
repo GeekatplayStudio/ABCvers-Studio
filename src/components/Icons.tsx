@@ -138,10 +138,29 @@ export const InfoIcon = (p: IconProps) => (
   </Svg>
 )
 
+/** Panels side by side on one line. */
+export const RowIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="6" width="5.5" height="12" rx="1.2" />
+    <rect x="9.25" y="6" width="5.5" height="12" rx="1.2" />
+    <rect x="15.5" y="6" width="5.5" height="12" rx="1.2" />
+  </Svg>
+)
+
+/** Panels wrapped into a block. */
 export const GridIcon = (p: IconProps) => (
   <Svg {...p}>
-    <rect x="4" y="4" width="7" height="16" rx="1.2" />
-    <rect x="13" y="4" width="7" height="16" rx="1.2" />
+    <rect x="4" y="4" width="7" height="7" rx="1.2" />
+    <rect x="13" y="4" width="7" height="7" rx="1.2" />
+    <rect x="4" y="13" width="7" height="7" rx="1.2" />
+    <rect x="13" y="13" width="7" height="7" rx="1.2" />
+  </Svg>
+)
+
+/** The "this opens a menu" marker on a dropdown trigger. */
+export const CaretIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m8 10.5 4 4 4-4" />
   </Svg>
 )
 

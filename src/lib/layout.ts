@@ -8,7 +8,7 @@
  */
 
 import { clamp } from './guards'
-import type { AspectKey, MediaItem, Size } from '../types'
+import type { AspectKey, LayoutMode, MediaItem, Size } from '../types'
 import { aspectOf } from './media'
 
 export const ASPECT_OPTIONS: { key: AspectKey; label: string; ratio: number | null }[] = [
@@ -27,20 +27,30 @@ export function ratioFor(aspect: AspectKey): number | null {
 }
 
 /**
- * `auto` keeps every panel in a single row, however many there are - a
- * comparison is between all of them at once, and wrapping into a grid once a
- * fifth or sixth panel is added means the panels people are actively
- * comparing are no longer side by side on screen together. `fitRow` still
- * shrinks panels to fit, so more panels means narrower ones, never a second
- * row.
+ * In `row` layout every panel stays on a single line, however many there are -
+ * a comparison is between all of them at once, and wrapping into a grid
+ * behind the user's back once a fifth or sixth panel is added means the panels
+ * they are actively comparing are no longer side by side on screen together.
+ * `fitRow` still shrinks panels to fit, so more panels means narrower ones,
+ * never a second row.
+ *
+ * `grid` is the opt-in escape hatch for when that trade stops paying: a row of
+ * eight clips is so narrow that each picture is a sliver, and squaring them off
+ * gives every panel back most of its height.
  */
-export function autoColumns(count: number): number {
-  return Math.max(1, count)
+export function autoColumns(count: number, layout: LayoutMode = 'row'): number {
+  if (count <= 0) return 1
+  if (layout === 'grid') return Math.ceil(Math.sqrt(count))
+  return count
 }
 
-export function resolveColumns(count: number, columns: number | 'auto'): number {
+export function resolveColumns(
+  count: number,
+  columns: number | 'auto',
+  layout: LayoutMode = 'row',
+): number {
   if (count <= 0) return 1
-  if (columns === 'auto') return autoColumns(count)
+  if (columns === 'auto') return autoColumns(count, layout)
   return clamp(Math.round(columns), 1, Math.max(1, count))
 }
 
@@ -117,7 +127,16 @@ export function fitRow(weights: readonly number[], box: Size, footerHeight = 0):
   const available = box.height - reservedFooter
   if (sum <= 0 || box.width <= 0 || available <= 0) return zero
 
-  const mediaHeight = Math.floor(Math.min(available, box.width / sum))
+  /*
+   * A height-constrained row is floored to a whole pixel; a width-constrained
+   * one is not. Flooring the second case would leave `sum` pixels - up to a
+   * couple of dozen on a wide grid - of background showing down the side of a
+   * row that is supposed to reach both edges. The widths below are integers
+   * either way, since they come from rounding cumulative positions rather than
+   * from the height directly.
+   */
+  const widthFit = box.width / sum
+  const mediaHeight = available <= widthFit ? Math.floor(available) : widthFit
   if (mediaHeight <= 0) return zero
 
   const widths: number[] = []
@@ -130,6 +149,70 @@ export function fitRow(weights: readonly number[], box: Size, footerHeight = 0):
     placed = edge
   }
   return { mediaHeight, widths }
+}
+
+/**
+ * Picture height a row of these weights gets when it fills the width exactly.
+ * This is the height that leaves nothing black down either side.
+ */
+function heightToFillWidth(weights: readonly number[], width: number): number {
+  let sum = 0
+  for (const weight of weights) sum += weight > 0 ? weight : 0
+  return sum > 0 ? width / sum : 0
+}
+
+/**
+ * The fewest columns - and so the largest panels - whose grid still fits the
+ * stage with every row spanning the full width.
+ *
+ * The two things a grid can do wrong are mirror images: too many columns and
+ * the panels are needlessly small; too few and each row runs out of height
+ * before it runs out of width, so the pictures shrink to fit the height and
+ * leave black bars down both sides. Those bars are the whole reason this is
+ * measured against the real stage rather than picked from the panel count with
+ * something like `ceil(sqrt(n))` - the right number of columns depends on the
+ * shape of the window as much as on how many panels are open.
+ *
+ * A column count fits exactly when the width-filling height is one the row can
+ * afford, which is why this can test "does it fill the width" and "does it fit
+ * the height" as the same question.
+ */
+export function bestFitColumns(
+  weights: readonly number[],
+  box: Size,
+  footerHeight = 0,
+): number {
+  const count = weights.length
+  if (count <= 1) return 1
+  if (box.width <= 0 || box.height <= 0) return count
+
+  for (let columns = 1; columns <= count; columns += 1) {
+    const rows = chunkRows(weights, columns)
+    const rowHeight = box.height / rows.length
+    const reserved = Math.min(Math.max(0, footerHeight), rowHeight * MAX_FOOTER_SHARE)
+    const available = rowHeight - reserved
+    if (available <= 0) continue
+    // Only full rows are asked to span the stage. A short last row keeps the
+    // panel size the rows above set - stretching two panels across the width
+    // of four would make them bigger than everything they are being compared
+    // against - so what it would need to fill the width is not a constraint.
+    const full = rows.filter((row) => row.length === columns)
+    const binding = full.length > 0 ? full : rows
+    const needed = Math.max(...binding.map((row) => heightToFillWidth(row, box.width)))
+    if (needed <= available) return columns
+  }
+  // Nothing fits (a stage barely taller than the info strips): the smallest
+  // panels are the best of a bad set.
+  return count
+}
+
+/**
+ * Every column count the grid slider may offer, largest panels first. Always
+ * at least one entry, so the control is never empty.
+ */
+export function gridColumnChoices(count: number): number[] {
+  const total = Math.max(1, count)
+  return Array.from({ length: total }, (_, index) => index + 1)
 }
 
 /**
